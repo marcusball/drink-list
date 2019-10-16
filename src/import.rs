@@ -1,3 +1,4 @@
+use chrono::prelude::*;
 use regex::Regex;
 
 /// Represents the components of an entry line
@@ -35,14 +36,14 @@ impl RawEntry {
 }
 
 #[derive(Clone, Debug)]
-pub struct Date {
-    pub day: String,
+pub struct DateContext {
+    pub date: NaiveDate,
     pub time: String,
     pub context: Vec<String>,
 }
 
-impl Date {
-    pub fn from_entry(entry: &RawEntry, previous: &Date) -> Date {
+impl DateContext {
+    pub fn from_entry(entry: &RawEntry, previous: &DateContext) -> DateContext {
         lazy_static! {
             static ref RE: Regex = Regex::new(
                 r#"^(?P<day>(?:\d{1,2}\s\w{3})|(?:\w{3}\s\d{1,2}))?[,; ]*(?:(?P<context2>[^\r\n;,]*?)[;,]?)?(?:(?P<context1>[^\r\n;,]*?)[;,]?)?$"#
@@ -68,7 +69,9 @@ impl Date {
                 .map(|s| s.to_lowercase())
         };
 
-        let day = cap_str("day").unwrap_or(previous.day.clone());
+        let date = cap_str("day")
+            .map(|s| Self::parse_date_string(&s, &previous.date))
+            .unwrap_or(previous.date.clone());
         let context1 = cap_str("context1");
         let context2 = cap_str("context2");
 
@@ -96,7 +99,7 @@ impl Date {
                 // Otherwise, if this record is the same day as the previous,
                 // then continue using the same time as the previous.
                 // Use "night" otherwise.
-                false => match day == previous.day {
+                false => match date == previous.date {
                     true => previous.time.clone(),
                     false => String::from("night"),
                 },
@@ -115,10 +118,38 @@ impl Date {
             .map(|c| c.as_ref().unwrap().to_string())
             .collect();
 
-        Date {
-            day: day,
+        DateContext {
+            date: date,
             time: time,
             context: context,
         }
+    }
+
+    /// Parse a date string in the format "1 oct" or "feb 21".
+    /// Use the `previous` date as context for inferring the proper year.
+    fn parse_date_string(date: &String, previous: &NaiveDate) -> NaiveDate {
+        use chrono::format::{parse, Parsed, StrftimeItems};
+
+        // Where parsed date info will be saved
+        let mut parsed = Parsed::new();
+
+        // Parsing format for "day month" dates.
+        let items = StrftimeItems::new("%b %e");
+
+        let result = parse(&mut parsed, date.as_str(), items);
+
+        if result.is_err() {
+            parse(&mut parsed, date.as_str(), StrftimeItems::new("%e %b"))
+                .expect("backup parse failed!");
+        }
+
+        let day = parsed.day.expect("Failed to parse day!");
+        let month = parsed.month.expect("Failed to parse month");
+        let year = match day == 1 && month == 1 {
+            true => previous.year() + 1,
+            false => previous.year(),
+        };
+
+        NaiveDate::from_ymd(year, month, day)
     }
 }

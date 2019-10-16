@@ -9,7 +9,7 @@ use std::io::BufReader;
 
 mod import;
 
-use import::{Date, RawEntry};
+use import::{DateContext, RawEntry};
 
 fn main() -> std::io::Result<()> {
     let f = File::open("drinks.csv")?;
@@ -17,8 +17,8 @@ fn main() -> std::io::Result<()> {
 
     let mut line = String::new();
 
-    let mut previous_date = Date {
-        day: "1 jan".into(),
+    let mut previous_date = DateContext {
+        date: chrono::NaiveDate::from_ymd(2018, 1, 1),
         time: "".into(),
         context: vec![],
     };
@@ -35,12 +35,12 @@ fn main() -> std::io::Result<()> {
             }
         };
 
-        let date = Date::from_entry(&entry, &previous_date);
+        let date = DateContext::from_entry(&entry, &previous_date);
         previous_date = date.clone();
 
         println!(
-            "{:6} | {:9} | {:10} | {:10} | {:40} | {:5} | {:10}",
-            date.day,
+            "{:11} | {:9} | {:10} | {:10} | {:40} | {:5} | {:10}",
+            date.date.format("%d %b %Y"),
             date.time,
             date.context.join(", "),
             entry.quantity.unwrap_or("?".into()),
