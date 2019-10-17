@@ -9,7 +9,7 @@ use std::io::BufReader;
 
 mod import;
 
-use import::{Abv, DateContext, QuantityRange, RawEntry};
+use import::{Abv, DateContext, QuantityRange, RawEntry, VolumeUnit};
 
 fn main() -> std::io::Result<()> {
     let f = File::open("drinks.csv")?;
@@ -40,6 +40,7 @@ fn main() -> std::io::Result<()> {
 
         let quantity = QuantityRange::from_entry(&entry);
         let abv = Abv::from_entry(&entry);
+        let volume = VolumeUnit::from_entry(&entry);
 
         println!(
             "{:11} | {:9} | {:10} | {:10} | {:40} | {:5} | {:10}",
@@ -49,7 +50,7 @@ fn main() -> std::io::Result<()> {
             quantity.print(),
             entry.name.unwrap_or("####".into()),
             abv.map(|a| a.print()).unwrap_or("".into()),
-            entry.volume.unwrap_or("?".into())
+            volume.map(|v| v.print()).unwrap_or("".into())
         );
 
         line.clear();

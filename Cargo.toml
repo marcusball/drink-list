@@ -10,3 +10,5 @@ edition = "2018"
 regex = "1"
 lazy_static = "1.4.0"
 chrono = "0.4"
+uom = { version = "0.25.0", features = ["f32", "f64", "use_serde", "si", "std"] }
+serde = "1.0.101"

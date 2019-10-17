@@ -1,5 +1,7 @@
 use chrono::prelude::*;
 use regex::Regex;
+use uom::si::f32::*;
+use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
 
 /// Represents the components of an entry line
 pub struct RawEntry {
@@ -316,6 +318,109 @@ impl Abv {
         }
 
         display.push('%');
+
+        display
+    }
+}
+
+pub struct VolumeUnit {
+    value: Volume,
+    approximate: bool,
+    original_unit: Option<String>,
+}
+
+impl VolumeUnit {
+    pub fn from_entry(entry: &RawEntry) -> Option<VolumeUnit> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"(?P<volume>~?\d+(?:\.\d+)?)\s*(?P<unit>\w{2,})"#).unwrap();
+        }
+        if entry.volume.is_none() {
+            return None;
+        }
+
+        let captures = match RE.captures(entry.volume.as_ref().unwrap()) {
+            Some(c) => c,
+            None => {
+                return None;
+            }
+        };
+
+        // Helper function to retrieve matches by name, as an Option<String>
+        let cap_str = |name| {
+            captures
+                .name(name)
+                .map(|m| m.as_str().trim())
+                .filter(|s| *s != "")
+                .map(|s| s.to_lowercase())
+        };
+
+        let volume_str = cap_str("volume");
+        let unit_str = cap_str("unit");
+
+        if volume_str.is_none() || unit_str.is_none() {
+            return None;
+        }
+
+        let (is_approximate, volume_amount) = Self::parse_value(volume_str.as_ref().unwrap());
+
+        let volume = match unit_str.as_ref().unwrap().as_ref() {
+            "oz" => Volume::new::<fluid_ounce>(volume_amount),
+            "ml" => Volume::new::<milliliter>(volume_amount),
+            "cl" => Volume::new::<centiliter>(volume_amount),
+            "l" => Volume::new::<liter>(volume_amount),
+            x => {
+                println!("Unrecognized volume unit, '{}'!", x);
+                return None;
+            }
+        };
+
+        Some(VolumeUnit {
+            value: volume,
+            approximate: is_approximate,
+            original_unit: unit_str,
+        })
+    }
+
+    pub fn parse_value(value: &str) -> (bool, f32) {
+        use std::str::FromStr;
+
+        let is_approximate = value.starts_with("~");
+        let value = f32::from_str(value.trim_start_matches("~"))
+            .expect(&format!("Failed to parse number, '{}'!", value));
+
+        (is_approximate, value)
+    }
+
+    pub fn print(&self) -> String {
+        use uom::fmt::DisplayStyle;
+        use uom::si::fmt::Arguments;
+        use uom::si::volume::Dimension;
+
+        lazy_static! {
+            static ref FMT_OZ: Arguments<Dimension, fluid_ounce> =
+                Volume::format_args(fluid_ounce, DisplayStyle::Abbreviation);
+            static ref FMT_ML: Arguments<Dimension, milliliter> =
+                Volume::format_args(milliliter, DisplayStyle::Abbreviation);
+            static ref FMT_CL: Arguments<Dimension, centiliter> =
+                Volume::format_args(centiliter, DisplayStyle::Abbreviation);
+            static ref FMT_L: Arguments<Dimension, liter> =
+                Volume::format_args(liter, DisplayStyle::Abbreviation);
+        }
+
+        let mut display = String::new();
+
+        if self.approximate {
+            display.push('~');
+        }
+
+        display.push_str(&match self.original_unit.as_ref().unwrap().as_ref() {
+            "oz" => format!("{}", FMT_OZ.with(self.value)),
+            "ml" => format!("{}", FMT_ML.with(self.value)),
+            "cl" => format!("{}", FMT_CL.with(self.value)),
+            "l" => format!("{}", FMT_L.with(self.value)),
+            x => panic!("Unrecognized original volume unit, '{}'!", x),
+        });
 
         display
     }
