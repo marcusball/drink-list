@@ -153,3 +153,143 @@ impl DateContext {
         NaiveDate::from_ymd(year, month, day)
     }
 }
+
+#[derive(PartialEq, Debug)]
+pub struct QuantityRange {
+    min: f32,
+    max: f32,
+    approximate_min: bool,
+    approximate_max: bool,
+}
+
+impl QuantityRange {
+    pub fn from_entry(entry: &RawEntry) -> QuantityRange {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"(~?\d+(?:\.\d+)?)(?:\s*\-\s*(~?\d+(?:\.\d+)?))?"#).unwrap();
+        }
+
+        let captures = RE
+            .captures(&entry.quantity.as_ref().expect("No quantity found!"))
+            .unwrap();
+
+        let cap_index = |index| {
+            captures
+                .get(index)
+                .map(|m| m.as_str().trim())
+                .filter(|s| *s != "")
+        };
+
+        let min = cap_index(1)
+            .map(Self::parse_value)
+            .expect("A minimum quantity is required!");
+        let max = cap_index(2).map(Self::parse_value).unwrap_or(min);
+
+        QuantityRange {
+            min: min.1,
+            max: max.1,
+            approximate_min: min.0,
+            approximate_max: max.0,
+        }
+    }
+
+    /// Parse a strings like "2", "1.5", "~3", etc, and return a tuple
+    /// indicating whether the value is approximate, and what the base numeric value is.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!((false, 1f32), QuantityRange::parse_value("1"));
+    /// ```
+    fn parse_value(value: &str) -> (bool, f32) {
+        use std::str::FromStr;
+
+        let is_approximate = value.starts_with("~");
+        let value = f32::from_str(value.trim_start_matches("~"))
+            .expect(&format!("Failed to parse number, '{}'!", value));
+
+        (is_approximate, value)
+    }
+
+    pub fn print(&self) -> String {
+        let mut display = String::new();
+
+        if self.approximate_min {
+            display.push_str("~");
+        }
+
+        display.push_str(&format!("{:.2}", self.min));
+
+        if self.min != self.max || self.approximate_min != self.approximate_max {
+            display.push('-');
+
+            if self.approximate_max {
+                display.push_str("~");
+            }
+
+            display.push_str(&format!("{:.2}", self.max));
+        }
+
+        display
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{QuantityRange, RawEntry};
+
+    #[test]
+    fn test_quantity_range_parse_value() {
+        assert_eq!((false, 1f32), QuantityRange::parse_value("1"));
+        assert_eq!((true, 2f32), QuantityRange::parse_value("~2"));
+        assert_eq!((true, 2.1234f32), QuantityRange::parse_value("~2.1234"));
+    }
+
+    #[test]
+    fn test_quantity_range_parse() {
+        let test = |range_tuple, entry_str| {
+            assert_eq!(
+                make_range(range_tuple),
+                QuantityRange::from_entry(&make_entry(entry_str))
+            );
+        };
+        test((false, 1.0, false, 1.0), "1");
+        test((false, 1.0, false, 1.0), "1-1");
+        test((true, 1.0, false, 1.0), "~1-1");
+        test((true, 1.0, true, 1.0), "~1-~1");
+        test((false, 1.0, true, 1.0), "1-~1");
+
+        test((false, 1.5, false, 1.5), "1.5");
+        test((true, 2.5, true, 2.5), "~2.5");
+        test((false, 66.666, false, 66.666), "66.666");
+        test((false, 3.0, false, 5.0), "3-5");
+        test((true, 2.0, true, 3.0), "~2-~3");
+        test((true, 2.5, true, 3.5), "~2.5-~3.5");
+
+        test((false, 3.0, false, 5.0), "3 - 5");
+        test((true, 2.0, true, 3.0), "~2 - ~3");
+        test((true, 2.5, true, 3.5), "~2.5 - ~3.5");
+        test((false, 1.0, false, 2.0), "1-2");
+    }
+
+    fn make_entry(quantity: &str) -> RawEntry {
+        RawEntry {
+            date: None,
+            quantity: Some(quantity.into()),
+            name: None,
+            abv: None,
+            volume: None,
+        }
+    }
+
+    fn make_range(tuple: (bool, f32, bool, f32)) -> QuantityRange {
+        let (apprx_min, min, apprx_max, max) = tuple;
+
+        QuantityRange {
+            min,
+            max,
+            approximate_min: apprx_min,
+            approximate_max: apprx_max,
+        }
+    }
+}
