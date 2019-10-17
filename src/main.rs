@@ -9,7 +9,7 @@ use std::io::BufReader;
 
 mod import;
 
-use import::{DateContext, QuantityRange, RawEntry};
+use import::{Abv, DateContext, QuantityRange, RawEntry};
 
 fn main() -> std::io::Result<()> {
     let f = File::open("drinks.csv")?;
@@ -39,6 +39,8 @@ fn main() -> std::io::Result<()> {
         previous_date = date.clone();
 
         let quantity = QuantityRange::from_entry(&entry);
+        let abv = Abv::from_entry(&entry);
+
         println!(
             "{:11} | {:9} | {:10} | {:10} | {:40} | {:5} | {:10}",
             date.date.format("%d %b %Y"),
@@ -46,7 +48,7 @@ fn main() -> std::io::Result<()> {
             date.context.join(", "),
             quantity.print(),
             entry.name.unwrap_or("####".into()),
-            entry.abv.unwrap_or("?".into()),
+            abv.map(|a| a.print()).unwrap_or("".into()),
             entry.volume.unwrap_or("?".into())
         );
 
