@@ -1,5 +1,7 @@
 use chrono::prelude::*;
 use regex::Regex;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use uom::si::f32::*;
 use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
 
@@ -236,7 +238,7 @@ impl QuantityRange {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug, Clone)]
 pub struct Abv {
     min: f32,
     max: f32,
@@ -320,6 +322,26 @@ impl Abv {
         display.push('%');
 
         display
+    }
+}
+
+impl PartialEq for Abv {
+    fn eq(&self, other: &Abv) -> bool {
+        ((self.min * 100.0).trunc() as i32) == ((other.min * 100.0).trunc() as i32)
+            && ((self.max * 100.0).trunc() as i32) == ((other.max * 100.0).trunc() as i32)
+            && self.approximate_min == other.approximate_min
+            && self.approximate_max == other.approximate_max
+    }
+}
+
+impl Eq for Abv {}
+
+impl Hash for Abv {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        ((self.min * 100.0).trunc() as i32).hash(state);
+        ((self.max * 100.0).trunc() as i32).hash(state);
+        self.approximate_min.hash(state);
+        self.approximate_max.hash(state);
     }
 }
 
@@ -423,6 +445,59 @@ impl VolumeUnit {
         });
 
         display
+    }
+}
+
+#[derive(PartialEq, Eq, Hash, Clone)]
+pub struct Drink {
+    pub name: String,
+    pub abv: Option<Abv>,
+}
+
+impl Drink {
+    pub fn from_entry(entry: &RawEntry) -> Drink {
+        Drink {
+            name: entry
+                .name
+                .as_ref()
+                .expect("Missing drink name!")
+                .trim()
+                .to_lowercase(),
+            abv: Abv::from_entry(entry),
+        }
+    }
+}
+
+pub struct DrinkSet {
+    drinks: HashMap<i32, Drink>,
+    lookup: HashMap<Drink, i32>,
+}
+
+impl DrinkSet {
+    pub fn new() -> DrinkSet {
+        DrinkSet {
+            drinks: HashMap::new(),
+            lookup: HashMap::new(),
+        }
+    }
+
+    pub fn get_id(&mut self, drink: &Drink) -> i32 {
+        match self.find(drink) {
+            Some(id) => id,
+            None => self.insert(drink.clone()),
+        }
+    }
+
+    pub fn find(&self, drink: &Drink) -> Option<i32> {
+        self.lookup.get(drink).map(|id| *id)
+    }
+
+    pub fn insert(&mut self, drink: Drink) -> i32 {
+        let id: i32 = self.drinks.keys().max().as_deref().unwrap_or(&0) + 1;
+        self.drinks.insert(id, drink.clone());
+        self.lookup.insert(drink, id);
+
+        id
     }
 }
 
