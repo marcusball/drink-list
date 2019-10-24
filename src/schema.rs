@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 #[derive(Debug, SqlType)]
 #[postgres(type_name = "realapprox")]
 pub struct Realapprox;

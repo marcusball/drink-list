@@ -1,6 +1,8 @@
 --- src/schema.rs	2019-10-24 00:03:26.291754020 -0400
 +++ src/schema-new.rs	2019-10-24 00:03:52.125084461 -0400
-@@ -1,6 +1,10 @@
+@@ -1,6 +1,12 @@
++#![allow(unused_imports)]
++
 +#[derive(Debug, SqlType)]
 +#[postgres(type_name = "realapprox")]
 +pub struct Realapprox;
