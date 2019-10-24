@@ -1,17 +1,62 @@
 #![feature(option_result_contains)]
+#![feature(option_expect_none)]
 
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate diesel;
 
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
+use dotenv::dotenv;
+
 mod import;
+mod models;
+mod schema;
 
 use import::{DateContext, Drink, DrinkSet, QuantityRange, RawEntry, VolumeUnit};
 
+fn establish_connection() -> PgConnection {
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set!");
+
+    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}!", database_url))
+}
+
+fn create_drink(conn: &PgConnection, drink: &Drink) -> models::Drink {
+    use models::ApproxF32;
+    use schema::drink;
+
+    let new_drink = models::NewDrink {
+        name: drink.name.as_str(),
+
+        min_abv: drink.abv.as_ref().map(|abv| ApproxF32 {
+            num: abv.min,
+            is_approximate: abv.approximate_min,
+        }),
+        max_abv: drink.abv.as_ref().map(|abv| ApproxF32 {
+            num: abv.max,
+            is_approximate: abv.approximate_max,
+        }),
+
+        multiplier: 1.0,
+    };
+
+    diesel::insert_into(drink::table)
+        .values(&new_drink)
+        .get_result(conn)
+        .expect("Error saving new drink")
+}
+
 fn main() -> std::io::Result<()> {
+    dotenv().ok();
+
+    let db_conn = establish_connection();
+
     let f = File::open("drinks.csv")?;
     let mut reader = BufReader::new(f);
 
@@ -44,7 +89,13 @@ fn main() -> std::io::Result<()> {
         let quantity = QuantityRange::from_entry(&entry);
         let volume = VolumeUnit::from_entry(&entry);
 
-        let id = drink_set.get_id(&drink);
+        let id = match drink_set.find(&drink) {
+            Some(id) => id,
+            None => {
+                let db_drink = create_drink(&db_conn, &drink);
+                drink_set.insert(db_drink.id, drink.clone())
+            }
+        };
 
         println!(
             "{:11} | {:9} | {:10} | {:10} | ({:3}) {:40} | {:5} | {:10}",

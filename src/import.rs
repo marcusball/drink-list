@@ -240,10 +240,10 @@ impl QuantityRange {
 
 #[derive(Debug, Clone)]
 pub struct Abv {
-    min: f32,
-    max: f32,
-    approximate_min: bool,
-    approximate_max: bool,
+    pub min: f32,
+    pub max: f32,
+    pub approximate_min: bool,
+    pub approximate_max: bool,
 }
 
 impl Abv {
@@ -448,7 +448,7 @@ impl VolumeUnit {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Drink {
     pub name: String,
     pub abv: Option<Abv>,
@@ -481,21 +481,17 @@ impl DrinkSet {
         }
     }
 
-    pub fn get_id(&mut self, drink: &Drink) -> i32 {
-        match self.find(drink) {
-            Some(id) => id,
-            None => self.insert(drink.clone()),
-        }
-    }
-
     pub fn find(&self, drink: &Drink) -> Option<i32> {
         self.lookup.get(drink).map(|id| *id)
     }
 
-    pub fn insert(&mut self, drink: Drink) -> i32 {
-        let id: i32 = self.drinks.keys().max().as_deref().unwrap_or(&0) + 1;
-        self.drinks.insert(id, drink.clone());
-        self.lookup.insert(drink, id);
+    pub fn insert(&mut self, id: i32, drink: Drink) -> i32 {
+        self.drinks
+            .insert(id, drink.clone())
+            .expect_none("Overwrote something!");
+        self.lookup
+            .insert(drink, id)
+            .expect_none("Overwrote something!");
 
         id
     }
