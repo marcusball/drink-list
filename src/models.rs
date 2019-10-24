@@ -39,20 +39,15 @@ pub struct Entry {
     pub drink_id: i32,
     pub name: String,
 
-    pub min_abv: Option<f32>,
-    pub approximate_min_abv: bool,
-    pub max_abv: Option<f32>,
-    pub approximate_max_abv: bool,
+    pub min_abv: Option<ApproxF32>,
+    pub max_abv: Option<ApproxF32>,
     pub multiplier: f32,
 
-    pub min_quantity: f32,
-    pub approximate_min_quantity: bool,
-    pub max_quantity: f32,
-    pub approximate_max_quantity: bool,
+    pub min_quantity: ApproxF32,
+    pub max_quantity: ApproxF32,
 
-    pub volume: Option<f32>,
+    pub volume: Option<ApproxF32>,
     pub volume_unit: Option<String>,
-    pub approximate_volume: bool,
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
