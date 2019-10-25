@@ -1,15 +1,26 @@
 --- src/schema.rs	2019-10-24 00:03:26.291754020 -0400
 +++ src/schema-new.rs	2019-10-24 00:03:52.125084461 -0400
-@@ -1,6 +1,12 @@
+@@ -1,6 +1,23 @@
 +#![allow(unused_imports)]
 +
 +#[derive(Debug, SqlType)]
 +#[postgres(type_name = "realapprox")]
 +pub struct Realapprox;
++#[derive(Debug, SqlType)]
++#[postgres(type_name = "timeperiod")]
++pub struct Timeperiod;
++
++#[derive(Debug, SqlType)]
++#[postgres(type_name = "volumeunit")]
++pub struct Volumeunit;
++
++#[derive(Debug, SqlType)]
++#[postgres(type_name = "volume")]
++pub struct Volume;
 +
  table! {
      use diesel::sql_types::*;
-     use super::Realapprox;
+     use super::{Realapprox, Timeperiod, Volumeunit, Volume};
  
      drink (id) {
          id -> Int4,
