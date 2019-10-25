@@ -20,6 +20,7 @@ mod models;
 mod schema;
 
 use import::{DateContext, Drink, DrinkSet, QuantityRange, RawEntry, VolumeUnit};
+use models::TimePeriod;
 
 fn establish_connection() -> PgConnection {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set!");
@@ -64,7 +65,7 @@ fn main() -> std::io::Result<()> {
 
     let mut previous_date = DateContext {
         date: chrono::NaiveDate::from_ymd(2018, 1, 1),
-        time: "".into(),
+        time: TimePeriod::Evening,
         context: vec![],
     };
 

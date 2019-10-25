@@ -3,5 +3,5 @@
 
 [print_schema]
 file = "src/schema.rs"
-import_types = ["diesel::sql_types::*", "super::Realapprox"]
+import_types = ["diesel::sql_types::*", "super::{Realapprox, Timeperiod, Volumeunit, Volume}"]
 patch_file = "src/schema.patch"

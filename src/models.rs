@@ -8,14 +8,14 @@ use diesel::serialize::{self, IsNull, Output, ToSql, WriteTuple};
 use diesel::sql_types::{Bool, Float4, Record};
 use std::io::Write;
 
-#[derive(Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Debug, FromSqlRow, AsExpression)]
 #[sql_type = "Realapprox"]
 pub struct ApproxF32 {
     pub num: f32,
     pub is_approximate: bool,
 }
 
-#[derive(Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
 #[sql_type = "Timeperiod"]
 pub enum TimePeriod {
     Morning,
@@ -24,7 +24,7 @@ pub enum TimePeriod {
     Night,
 }
 
-#[derive(Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Debug, FromSqlRow, AsExpression)]
 #[sql_type = "Volumeunit"]
 #[allow(non_camel_case_types)]
 pub enum VolumeUnit {
@@ -34,9 +34,41 @@ pub enum VolumeUnit {
     L,
 }
 
-#[derive(Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Debug, FromSqlRow, AsExpression)]
 #[sql_type = "DbVolume"]
 pub struct Volume(ApproxF32, VolumeUnit);
+
+impl TimePeriod {
+    /// Returns whether the given `time` string is a recognized time period.
+    pub fn is_time_string(time: &str) -> bool {
+        Self::from_str(time).is_some()
+    }
+
+    pub fn from_str(time: &str) -> Option<TimePeriod> {
+        match time {
+            "morning" => Some(TimePeriod::Morning),
+            "afternoon" => Some(TimePeriod::Afternoon),
+            "evening" => Some(TimePeriod::Evening),
+            "night" => Some(TimePeriod::Night),
+            _ => None,
+        }
+    }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            TimePeriod::Morning => "morning",
+            TimePeriod::Afternoon => "afternoon",
+            TimePeriod::Evening => "evening",
+            TimePeriod::Night => "night",
+        }
+    }
+}
+
+impl std::fmt::Display for TimePeriod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_str())
+    }
+}
 
 impl ToSql<Realapprox, Pg> for ApproxF32 {
     fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
@@ -56,12 +88,7 @@ impl FromSql<Realapprox, Pg> for ApproxF32 {
 
 impl ToSql<Timeperiod, Pg> for TimePeriod {
     fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
-        match *self {
-            TimePeriod::Morning => out.write_all(b"morning")?,
-            TimePeriod::Afternoon => out.write_all(b"afternoon")?,
-            TimePeriod::Evening => out.write_all(b"evening")?,
-            TimePeriod::Night => out.write_all(b"night")?,
-        }
+        out.write_all(self.to_str().as_bytes())?;
         Ok(IsNull::No)
     }
 }

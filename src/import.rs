@@ -1,3 +1,4 @@
+use crate::models::TimePeriod;
 use chrono::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
@@ -42,7 +43,7 @@ impl RawEntry {
 #[derive(Clone, Debug)]
 pub struct DateContext {
     pub date: NaiveDate,
-    pub time: String,
+    pub time: TimePeriod,
     pub context: Vec<String>,
 }
 
@@ -54,7 +55,6 @@ impl DateContext {
             )
             .unwrap();
 
-            static ref TIMES: Vec<&'static str> = vec!["morning", "afternoon", "evening", "night"];
             static ref BRUNCH: String = String::from("brunch");
         }
         if entry.date.is_none() {
@@ -81,7 +81,7 @@ impl DateContext {
 
         let is_time_string = |context: Option<&String>| {
             context
-                .map(|c| TIMES.contains(&c.as_ref()))
+                .map(|c| TimePeriod::is_time_string(&c.as_ref()))
                 .unwrap_or(false)
         };
 
@@ -89,23 +89,25 @@ impl DateContext {
         let is_brunch =
             context1.contains(&BRUNCH as &String) || context2.contains(&BRUNCH as &String);
 
-        let time = match (
+        let time: TimePeriod = match (
             is_time_string(context1.as_ref()),
             is_time_string(context2.as_ref()),
         ) {
             // If one of either is a time specifier, then use that value.
-            (true, false) => context1.clone().unwrap(),
-            (false, true) => context2.clone().unwrap(),
+            (true, false) => TimePeriod::from_str(context1.as_ref().unwrap())
+                .expect("Failed to parse time period!"),
+            (false, true) => TimePeriod::from_str(context2.as_ref().unwrap())
+                .expect("Failed to parse time period!"),
             // If neither specify the time perioud, first check if "brunch" was present.
             (false, false) => match is_brunch {
                 // If it was, then use "afternoon"
-                true => String::from("afternoon"),
+                true => TimePeriod::Afternoon,
                 // Otherwise, if this record is the same day as the previous,
                 // then continue using the same time as the previous.
                 // Use "night" otherwise.
                 false => match date == previous.date {
-                    true => previous.time.clone(),
-                    false => String::from("night"),
+                    true => previous.time,
+                    false => TimePeriod::Night,
                 },
             },
             // There should be no case of "afternoon, night" etc.
@@ -118,7 +120,8 @@ impl DateContext {
 
         let context = vec![context1, context2]
             .iter()
-            .filter(|c| c.is_some() && !c.contains(&time))
+            // Remove any context strings that denote the time period.
+            .filter(|c| c.is_some() && !TimePeriod::is_time_string(c.as_ref().unwrap()))
             .map(|c| c.as_ref().unwrap().to_string())
             .collect();
 
