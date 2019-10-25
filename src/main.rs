@@ -62,6 +62,18 @@ fn create_entry(
 ) -> models::PlainEntry {
     use models::*;
     use schema::entry;
+    use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
+
+    // This seems like an obvious desire, but I can't figure out
+    // how to get uom to give me the value in the original units.
+    let get_volume = |v: &VolumeContext| -> f32 {
+        match v.original_unit.unwrap() {
+            VolumeUnit::FlOz => v.value.get::<fluid_ounce>(),
+            VolumeUnit::mL => v.value.get::<milliliter>(),
+            VolumeUnit::cL => v.value.get::<centiliter>(),
+            VolumeUnit::L => v.value.get::<liter>(),
+        }
+    };
 
     let new_entry = models::NewEntry {
         person_id: 1,
@@ -76,24 +88,22 @@ fn create_entry(
             num: quantity.max,
             is_approximate: quantity.approximate_max,
         },
-        // @TODO This is not the correct volume unit!
         volume: volume.clone().as_ref().map(|v| {
             models::LiquidVolume(
                 models::ApproxF32 {
-                    num: v.value.value,
+                    num: get_volume(v),
                     is_approximate: v.approximate,
                 },
                 v.original_unit.unwrap(),
             )
         }),
-        // @TODO Actually convert the mL
         volume_ml: volume.clone().as_ref().map(|v| {
             models::LiquidVolume(
                 models::ApproxF32 {
-                    num: v.value.value,
+                    num: v.value.get::<milliliter>(),
                     is_approximate: v.approximate,
                 },
-                v.original_unit.unwrap(),
+                VolumeUnit::mL,
             )
         }),
     };
