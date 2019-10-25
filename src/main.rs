@@ -19,7 +19,7 @@ mod import;
 mod models;
 mod schema;
 
-use import::{DateContext, Drink, DrinkSet, QuantityRange, RawEntry, VolumeUnit};
+use import::{DateContext, Drink, DrinkSet, QuantityRange, RawEntry, VolumeContext};
 use models::TimePeriod;
 
 fn establish_connection() -> PgConnection {
@@ -51,6 +51,57 @@ fn create_drink(conn: &PgConnection, drink: &Drink) -> models::Drink {
         .values(&new_drink)
         .get_result(conn)
         .expect("Error saving new drink")
+}
+
+fn create_entry(
+    conn: &PgConnection,
+    drink_id: i32,
+    date: &DateContext,
+    quantity: &QuantityRange,
+    volume: &Option<VolumeContext>,
+) -> models::PlainEntry {
+    use models::*;
+    use schema::entry;
+
+    let new_entry = models::NewEntry {
+        person_id: 1,
+        drank_on: &date.date,
+        time_period: &date.time,
+        drink_id: drink_id,
+        min_quantity: &ApproxF32 {
+            num: quantity.min,
+            is_approximate: quantity.approximate_min,
+        },
+        max_quantity: &ApproxF32 {
+            num: quantity.max,
+            is_approximate: quantity.approximate_max,
+        },
+        // @TODO This is not the correct volume unit!
+        volume: volume.clone().as_ref().map(|v| {
+            models::LiquidVolume(
+                models::ApproxF32 {
+                    num: v.value.value,
+                    is_approximate: v.approximate,
+                },
+                v.original_unit.unwrap(),
+            )
+        }),
+        // @TODO Actually convert the mL
+        volume_ml: volume.clone().as_ref().map(|v| {
+            models::LiquidVolume(
+                models::ApproxF32 {
+                    num: v.value.value,
+                    is_approximate: v.approximate,
+                },
+                v.original_unit.unwrap(),
+            )
+        }),
+    };
+
+    diesel::insert_into(entry::table)
+        .values(&new_entry)
+        .get_result(conn)
+        .expect("Error saving new entry")
 }
 
 fn main() -> std::io::Result<()> {
@@ -88,7 +139,7 @@ fn main() -> std::io::Result<()> {
 
         let drink = Drink::from_entry(&entry);
         let quantity = QuantityRange::from_entry(&entry);
-        let volume = VolumeUnit::from_entry(&entry);
+        let volume = VolumeContext::from_entry(&entry);
 
         let id = match drink_set.find(&drink) {
             Some(id) => id,
@@ -97,6 +148,8 @@ fn main() -> std::io::Result<()> {
                 drink_set.insert(db_drink.id, drink.clone())
             }
         };
+
+        create_entry(&db_conn, id, &date, &quantity, &volume);
 
         println!(
             "{:11} | {:9} | {:10} | {:10} | ({:3}) {:40} | {:5} | {:10}",

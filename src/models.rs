@@ -1,4 +1,3 @@
-use crate::schema::Volume as DbVolume;
 use crate::schema::*;
 use chrono::naive::NaiveDate;
 use chrono::{DateTime, Utc};
@@ -8,7 +7,7 @@ use diesel::serialize::{self, IsNull, Output, ToSql, WriteTuple};
 use diesel::sql_types::{Bool, Float4, Record};
 use std::io::Write;
 
-#[derive(Clone, Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
 #[sql_type = "Realapprox"]
 pub struct ApproxF32 {
     pub num: f32,
@@ -24,7 +23,7 @@ pub enum TimePeriod {
     Night,
 }
 
-#[derive(Clone, Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
 #[sql_type = "Volumeunit"]
 #[allow(non_camel_case_types)]
 pub enum VolumeUnit {
@@ -34,9 +33,9 @@ pub enum VolumeUnit {
     L,
 }
 
-#[derive(Clone, Debug, FromSqlRow, AsExpression)]
-#[sql_type = "DbVolume"]
-pub struct Volume(ApproxF32, VolumeUnit);
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
+#[sql_type = "Volume"]
+pub struct LiquidVolume(pub ApproxF32, pub VolumeUnit);
 
 impl TimePeriod {
     /// Returns whether the given `time` string is a recognized time period.
@@ -105,6 +104,27 @@ impl FromSql<Timeperiod, Pg> for TimePeriod {
     }
 }
 
+impl VolumeUnit {
+    pub fn from_str(unit: &str) -> Option<VolumeUnit> {
+        match unit.to_lowercase().as_str() {
+            "fl oz" | "oz" => Some(VolumeUnit::FlOz),
+            "ml" => Some(VolumeUnit::mL),
+            "cl" => Some(VolumeUnit::cL),
+            "l" => Some(VolumeUnit::L),
+            _ => None,
+        }
+    }
+
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            VolumeUnit::FlOz => "fl oz",
+            VolumeUnit::mL => "mL",
+            VolumeUnit::cL => "cL",
+            VolumeUnit::L => "L",
+        }
+    }
+}
+
 impl ToSql<Volumeunit, Pg> for VolumeUnit {
     fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
         match *self {
@@ -129,16 +149,22 @@ impl FromSql<Volumeunit, Pg> for VolumeUnit {
     }
 }
 
-impl ToSql<DbVolume, Pg> for Volume {
+impl std::fmt::Display for VolumeUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_str())
+    }
+}
+
+impl ToSql<Volume, Pg> for LiquidVolume {
     fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
         WriteTuple::<(Realapprox, Volumeunit)>::write_tuple(&(&self.0, &self.1), out)
     }
 }
 
-impl FromSql<DbVolume, Pg> for Volume {
+impl FromSql<Volume, Pg> for LiquidVolume {
     fn from_sql(bytes: Option<&[u8]>) -> deserialize::Result<Self> {
         let (vol, unit) = FromSql::<Record<(Realapprox, Volumeunit)>, Pg>::from_sql(bytes)?;
-        Ok(Volume(vol, unit))
+        Ok(LiquidVolume(vol, unit))
     }
 }
 
@@ -147,7 +173,7 @@ pub struct Entry {
     pub id: i32,
     pub person_id: i32,
     pub drank_on: NaiveDate,
-    pub time: String,
+    pub time: TimePeriod,
     pub drink_id: i32,
     pub name: String,
 
@@ -158,11 +184,42 @@ pub struct Entry {
     pub min_quantity: ApproxF32,
     pub max_quantity: ApproxF32,
 
-    pub volume: Option<Volume>,
-    pub volume_ml: Option<Volume>,
+    pub volume: Option<LiquidVolume>,
+    pub volume_ml: Option<LiquidVolume>,
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Queryable)]
+pub struct PlainEntry {
+    pub id: i32,
+    pub person_id: i32,
+    pub drank_on: NaiveDate,
+    pub time: TimePeriod,
+    pub drink_id: i32,
+
+    pub min_quantity: ApproxF32,
+    pub max_quantity: ApproxF32,
+
+    pub volume: Option<LiquidVolume>,
+    pub volume_ml: Option<LiquidVolume>,
+
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Insertable)]
+#[table_name = "entry"]
+pub struct NewEntry<'a> {
+    pub person_id: i32,
+    pub drank_on: &'a NaiveDate,
+    pub time_period: &'a TimePeriod,
+    pub drink_id: i32,
+    pub min_quantity: &'a ApproxF32,
+    pub max_quantity: &'a ApproxF32,
+    pub volume: Option<LiquidVolume>,
+    pub volume_ml: Option<LiquidVolume>,
 }
 
 #[derive(Queryable)]

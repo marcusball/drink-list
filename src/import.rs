@@ -1,4 +1,4 @@
-use crate::models::TimePeriod;
+use crate::models::{TimePeriod, VolumeUnit};
 use chrono::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
@@ -163,10 +163,10 @@ impl DateContext {
 
 #[derive(PartialEq, Debug)]
 pub struct QuantityRange {
-    min: f32,
-    max: f32,
-    approximate_min: bool,
-    approximate_max: bool,
+    pub min: f32,
+    pub max: f32,
+    pub approximate_min: bool,
+    pub approximate_max: bool,
 }
 
 impl QuantityRange {
@@ -348,14 +348,14 @@ impl Hash for Abv {
     }
 }
 
-pub struct VolumeUnit {
-    value: Volume,
-    approximate: bool,
-    original_unit: Option<String>,
+pub struct VolumeContext {
+    pub value: Volume,
+    pub approximate: bool,
+    pub original_unit: Option<VolumeUnit>,
 }
 
-impl VolumeUnit {
-    pub fn from_entry(entry: &RawEntry) -> Option<VolumeUnit> {
+impl VolumeContext {
+    pub fn from_entry(entry: &RawEntry) -> Option<VolumeContext> {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(?P<volume>~?\d+(?:\.\d+)?)\s*(?P<unit>\w{2,})"#).unwrap();
@@ -400,10 +400,10 @@ impl VolumeUnit {
             }
         };
 
-        Some(VolumeUnit {
+        Some(VolumeContext {
             value: volume,
             approximate: is_approximate,
-            original_unit: unit_str,
+            original_unit: unit_str.map(|s| VolumeUnit::from_str(&s).unwrap()),
         })
     }
 
@@ -439,11 +439,11 @@ impl VolumeUnit {
             display.push('~');
         }
 
-        display.push_str(&match self.original_unit.as_ref().unwrap().as_ref() {
-            "oz" => format!("{}", FMT_OZ.with(self.value)),
-            "ml" => format!("{}", FMT_ML.with(self.value)),
-            "cl" => format!("{}", FMT_CL.with(self.value)),
-            "l" => format!("{}", FMT_L.with(self.value)),
+        display.push_str(&match self.original_unit.unwrap() {
+            VolumeUnit::FlOz => format!("{}", FMT_OZ.with(self.value)),
+            VolumeUnit::mL => format!("{}", FMT_ML.with(self.value)),
+            VolumeUnit::cL => format!("{}", FMT_CL.with(self.value)),
+            VolumeUnit::L => format!("{}", FMT_L.with(self.value)),
             x => panic!("Unrecognized original volume unit, '{}'!", x),
         });
 
