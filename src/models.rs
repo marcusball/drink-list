@@ -5,16 +5,17 @@ use diesel::deserialize::{self, FromSql};
 use diesel::pg::Pg;
 use diesel::serialize::{self, IsNull, Output, ToSql, WriteTuple};
 use diesel::sql_types::{Bool, Float4, Record};
+use serde::Serialize;
 use std::io::Write;
 
-#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
 #[sql_type = "Realapprox"]
 pub struct ApproxF32 {
     pub num: f32,
     pub is_approximate: bool,
 }
 
-#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
 #[sql_type = "Timeperiod"]
 pub enum TimePeriod {
     Morning,
@@ -23,7 +24,7 @@ pub enum TimePeriod {
     Night,
 }
 
-#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
 #[sql_type = "Volumeunit"]
 #[allow(non_camel_case_types)]
 pub enum VolumeUnit {
@@ -33,7 +34,7 @@ pub enum VolumeUnit {
     L,
 }
 
-#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
 #[sql_type = "Volume"]
 pub struct LiquidVolume(pub ApproxF32, pub VolumeUnit);
 
@@ -166,29 +167,6 @@ impl FromSql<Volume, Pg> for LiquidVolume {
         let (vol, unit) = FromSql::<Record<(Realapprox, Volumeunit)>, Pg>::from_sql(bytes)?;
         Ok(LiquidVolume(vol, unit))
     }
-}
-
-#[derive(Queryable)]
-pub struct Entry {
-    pub id: i32,
-    pub person_id: i32,
-    pub drank_on: NaiveDate,
-    pub time: TimePeriod,
-    pub drink_id: i32,
-    pub name: String,
-
-    pub min_abv: Option<ApproxF32>,
-    pub max_abv: Option<ApproxF32>,
-    pub multiplier: f32,
-
-    pub min_quantity: ApproxF32,
-    pub max_quantity: ApproxF32,
-
-    pub volume: Option<LiquidVolume>,
-    pub volume_ml: Option<LiquidVolume>,
-
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Queryable)]

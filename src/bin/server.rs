@@ -1,7 +1,9 @@
 #[macro_use]
-extern crate serde_derive;
+extern crate serde;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate derive_more;
 
 use std::convert::From;
 use std::str::FromStr;
@@ -17,7 +19,8 @@ use futures::Future;
 use regex::Regex;
 
 use drink_list::api::{ApiResponse, ResponseStatus};
-use drink_list::db::{Connection, Pool};
+use drink_list::db;
+use drink_list::db::{Connection, GetDrinks, Pool};
 
 fn index() -> impl Responder {
     #[derive(Serialize)]
@@ -34,6 +37,19 @@ fn wakeup() -> impl Responder {
     struct TestResponse(String);
 
     HttpResponse::Ok().json(ApiResponse::success(TestResponse("👍".into())))
+}
+
+fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error = Error> {
+    #[derive(Serialize)]
+    #[serde(rename = "drinks")]
+    struct Drinks(Vec<db::Entry>);
+
+    db::execute(&pool, GetDrinks { person_id: 1 })
+        .from_err()
+        .and_then(|res| match res {
+            Ok(drinks) => Ok(HttpResponse::Ok().json(ApiResponse::success(Drinks(drinks)))),
+            Err(_) => Ok(HttpResponse::InternalServerError().into()),
+        })
 }
 
 fn main() -> std::io::Result<()> {
@@ -65,6 +81,11 @@ fn main() -> std::io::Result<()> {
             .wrap(Cors::default())
             .route("/", web::get().to(index))
             .route("/wakeup", web::get().to(wakeup))
+            .service(
+                web::scope("/drink")
+                    .service(web::resource("").route(web::get().to_async(get_drinks))),
+            )
+
         /*.service(
             web::scope("/drink")
                 .service(
