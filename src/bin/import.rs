@@ -1,11 +1,3 @@
-#![feature(option_result_contains)]
-#![feature(option_expect_none)]
-
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate diesel;
-
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -15,12 +7,9 @@ use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use dotenv::dotenv;
 
-mod import;
-mod models;
-mod schema;
-
-use import::{DateContext, Drink, DrinkSet, QuantityRange, RawEntry, VolumeContext};
-use models::TimePeriod;
+use drink_list::import::{DateContext, Drink, DrinkSet, QuantityRange, RawEntry, VolumeContext};
+use drink_list::models::TimePeriod;
+use drink_list::{models, schema};
 
 fn establish_connection() -> PgConnection {
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set!");
