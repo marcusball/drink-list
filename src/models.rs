@@ -36,7 +36,10 @@ pub enum VolumeUnit {
 
 #[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
 #[sql_type = "Volume"]
-pub struct LiquidVolume(pub ApproxF32, pub VolumeUnit);
+pub struct LiquidVolume {
+    pub amount: ApproxF32,
+    pub unit: VolumeUnit,
+}
 
 impl TimePeriod {
     /// Returns whether the given `time` string is a recognized time period.
@@ -158,14 +161,17 @@ impl std::fmt::Display for VolumeUnit {
 
 impl ToSql<Volume, Pg> for LiquidVolume {
     fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
-        WriteTuple::<(Realapprox, Volumeunit)>::write_tuple(&(&self.0, &self.1), out)
+        WriteTuple::<(Realapprox, Volumeunit)>::write_tuple(&(&self.amount, &self.unit), out)
     }
 }
 
 impl FromSql<Volume, Pg> for LiquidVolume {
     fn from_sql(bytes: Option<&[u8]>) -> deserialize::Result<Self> {
         let (vol, unit) = FromSql::<Record<(Realapprox, Volumeunit)>, Pg>::from_sql(bytes)?;
-        Ok(LiquidVolume(vol, unit))
+        Ok(LiquidVolume {
+            amount: vol,
+            unit: unit,
+        })
     }
 }
 

@@ -77,23 +77,19 @@ fn create_entry(
             num: quantity.max,
             is_approximate: quantity.approximate_max,
         },
-        volume: volume.clone().as_ref().map(|v| {
-            models::LiquidVolume(
-                models::ApproxF32 {
-                    num: get_volume(v),
-                    is_approximate: v.approximate,
-                },
-                v.original_unit.unwrap(),
-            )
+        volume: volume.clone().as_ref().map(|v| models::LiquidVolume {
+            amount: models::ApproxF32 {
+                num: get_volume(v),
+                is_approximate: v.approximate,
+            },
+            unit: v.original_unit.unwrap(),
         }),
-        volume_ml: volume.clone().as_ref().map(|v| {
-            models::LiquidVolume(
-                models::ApproxF32 {
-                    num: v.value.get::<milliliter>(),
-                    is_approximate: v.approximate,
-                },
-                VolumeUnit::mL,
-            )
+        volume_ml: volume.clone().as_ref().map(|v| models::LiquidVolume {
+            amount: models::ApproxF32 {
+                num: v.value.get::<milliliter>(),
+                is_approximate: v.approximate,
+            },
+            unit: VolumeUnit::mL,
         }),
     };
 
