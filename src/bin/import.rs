@@ -33,7 +33,7 @@ fn create_drink(conn: &PgConnection, drink: &Drink) -> models::Drink {
             is_approximate: abv.approximate_max,
         }),
 
-        multiplier: 1.0,
+        multiplier: drink.multiplier,
     };
 
     diesel::insert_into(drink::table)

@@ -451,14 +451,24 @@ impl VolumeContext {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Drink {
     pub name: String,
     pub abv: Option<Abv>,
+    pub multiplier: f32,
 }
 
 impl Drink {
     pub fn from_entry(entry: &RawEntry) -> Drink {
+        let multiplier = entry
+            .name
+            .as_ref()
+            .map(|name| match name.contains("double") {
+                true => 2.0,
+                false => 1.0,
+            })
+            .unwrap_or(1.0);
+
         Drink {
             name: entry
                 .name
@@ -467,7 +477,27 @@ impl Drink {
                 .trim()
                 .to_lowercase(),
             abv: Abv::from_entry(entry),
+            multiplier: multiplier,
         }
+    }
+}
+
+impl PartialEq for Drink {
+    fn eq(&self, other: &Drink) -> bool {
+        self.name == other.name
+            && self.abv == other.abv
+            && ((self.multiplier * 100.0).trunc() as i32)
+                == ((other.multiplier * 100.0).trunc() as i32)
+    }
+}
+
+impl Eq for Drink {}
+
+impl Hash for Drink {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.abv.hash(state);
+        ((self.multiplier * 100.0).trunc() as i32).hash(state);
     }
 }
 
