@@ -36,6 +36,7 @@ pub struct Entry {
     pub id: i32,
     pub drank_on: NaiveDate,
     pub time: TimePeriod,
+    pub context: Vec<String>,
     pub drink_id: i32,
     pub name: String,
 
@@ -77,6 +78,7 @@ impl Query for GetDrinks {
                 entry::id,
                 entry::drank_on,
                 entry::time_period,
+                entry::context,
                 entry::drink_id,
                 drink::name,
                 drink::min_abv,
