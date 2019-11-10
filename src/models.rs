@@ -181,6 +181,7 @@ pub struct PlainEntry {
     pub person_id: i32,
     pub drank_on: NaiveDate,
     pub time: TimePeriod,
+    pub context: Vec<String>,
     pub drink_id: i32,
 
     pub min_quantity: ApproxF32,
@@ -199,6 +200,7 @@ pub struct NewEntry<'a> {
     pub person_id: i32,
     pub drank_on: &'a NaiveDate,
     pub time_period: &'a TimePeriod,
+    pub context: &'a Vec<String>,
     pub drink_id: i32,
     pub min_quantity: &'a ApproxF32,
     pub max_quantity: &'a ApproxF32,

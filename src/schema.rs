@@ -39,6 +39,7 @@ table! {
         person_id -> Int4,
         drank_on -> Date,
         time_period -> Timeperiod,
+        context -> Array<Text>,
         drink_id -> Int4,
         min_quantity -> Realapprox,
         max_quantity -> Realapprox,

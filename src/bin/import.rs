@@ -68,6 +68,7 @@ fn create_entry(
         person_id: 1,
         drank_on: &date.date,
         time_period: &date.time,
+        context: &date.context,
         drink_id: drink_id,
         min_quantity: &ApproxF32 {
             num: quantity.min,

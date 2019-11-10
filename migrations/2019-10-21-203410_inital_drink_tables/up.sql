@@ -37,6 +37,7 @@ CREATE TABLE entry (
     person_id          INTEGER     NOT NULL REFERENCES person(id) ON DELETE CASCADE ON UPDATE CASCADE,
     drank_on           DATE        NOT NULL,
     time_period        TIMEPERIOD  NOT NULL,
+    context            TEXT[]      NOT NULL,
     drink_id           INTEGER     NOT NULL REFERENCES drink(id)       ON DELETE NO ACTION ON UPDATE CASCADE,
     min_quantity       REALAPPROX  NOT NULL,
     max_quantity       REALAPPROX  NOT NULL,
@@ -50,6 +51,7 @@ CREATE INDEX ON entry (person_id, drink_id, drank_on);
 COMMENT ON COLUMN entry.time_period IS 'The approximate time of day during which this was drank.';
 COMMENT ON COLUMN entry.volume      IS 'The liquid volume of one `quantity` unit of this drink.';
 COMMENT ON COLUMN entry.volume_ml   IS 'The `volume` of the drink entry expressed in milliliters.';
+COMMENT ON COLUMN entry.context     IS 'Any notes about this entry that add additional context.';
 
 -- Let Diesel manage 'updated_at' columns
 SELECT diesel_manage_updated_at('person');
