@@ -44,12 +44,18 @@ fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error =
     #[serde(rename = "drinks")]
     struct Drinks(Vec<db::Entry>);
 
-    db::execute(&pool, GetDrinks { person_id: 1 })
-        .from_err()
-        .and_then(|res| match res {
-            Ok(drinks) => Ok(HttpResponse::Ok().json(ApiResponse::success(Drinks(drinks)))),
-            Err(_) => Ok(HttpResponse::InternalServerError().into()),
-        })
+    db::execute(
+        &pool,
+        GetDrinks {
+            person_id: 1,
+            date_range: None,
+        },
+    )
+    .from_err()
+    .and_then(|res| match res {
+        Ok(drinks) => Ok(HttpResponse::Ok().json(ApiResponse::success(Drinks(drinks)))),
+        Err(_) => Ok(HttpResponse::InternalServerError().into()),
+    })
 }
 
 fn main() -> std::io::Result<()> {

@@ -61,6 +61,7 @@ pub struct Entry {
 #[derive(Clone)]
 pub struct GetDrinks {
     pub person_id: i32,
+    pub date_range: Option<(NaiveDate, NaiveDate)>,
 }
 
 impl Query for GetDrinks {
@@ -72,7 +73,17 @@ impl Query for GetDrinks {
         use crate::schema::entry;
         use crate::schema::entry::dsl::*;
 
-        Ok(entry
+        /* let filter = match self.date_range {
+            Some((start, end)) => Box::new(
+                entry::person_id
+                    .eq(&self.person_id)
+                    .and(entry::drank_on.ge(start))
+                    .and(entry::drank_on.le(end)),
+            ),
+            None => Box::new(entry::person_id.eq(&self.person_id)),
+        };*/
+
+        let mut query = entry
             .inner_join(drink)
             .select((
                 entry::id,
@@ -92,6 +103,12 @@ impl Query for GetDrinks {
                 entry::updated_at,
             ))
             .filter(entry::person_id.eq(&self.person_id))
+            .into_boxed();
+
+        if let Some((start, end)) = self.date_range {
+            query = query.filter(entry::drank_on.ge(start).and(entry::drank_on.le(end)));
+        }
+        Ok(query
             .order(entry::drank_on.asc())
             .then_order_by(entry::time_period.asc())
             .load::<Entry>(&conn)?)
