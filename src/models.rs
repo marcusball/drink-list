@@ -8,11 +8,38 @@ use diesel::sql_types::{Bool, Float4, Record};
 use serde::Serialize;
 use std::io::Write;
 
+/// What percentage +/- should be applied to approximate values.
+static APPROX_MODIFIER: f32 = 0.1;
+
 #[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
 #[sql_type = "Realapprox"]
 pub struct ApproxF32 {
     pub num: f32,
     pub is_approximate: bool,
+}
+
+impl ApproxF32 {
+    #[inline]
+    pub fn min(&self) -> f32 {
+        // This is a (probably dumb, unnecessary) attempt to avoid a conditional
+        // so as to just use pure math operations.
+        // In pseudocode, this is: `abv.is_approximate ? abv.num * (1 - MOD) : abv.num`.
+        self.num
+            * (1.0
+                - (APPROX_MODIFIER
+                    + ((!self.is_approximate as i32) as f32 * -1.0 * APPROX_MODIFIER)))
+    }
+
+    #[inline]
+    pub fn max(&self) -> f32 {
+        // This is a (probably dumb, unnecessary) attempt to avoid a conditional
+        // so as to just use pure math operations.
+        // In pseudocode, this is: `abv.is_approximate ? abv.num * (1 + MOD) : abv.num`.
+        self.num
+            * (1.0
+                + (APPROX_MODIFIER
+                    + ((!self.is_approximate as i32) as f32 * -1.0 * APPROX_MODIFIER)))
+    }
 }
 
 #[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]

@@ -15,4 +15,5 @@ pub mod db;
 pub mod error;
 pub mod import;
 pub mod models;
+pub mod reports;
 pub mod schema;

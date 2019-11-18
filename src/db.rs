@@ -54,6 +54,42 @@ pub struct Entry {
     pub updated_at: DateTime<Utc>,
 }
 
+impl Entry {
+    #[inline]
+    pub fn min_quantity(&self) -> f32 {
+        self.min_quantity.min()
+    }
+
+    #[inline]
+    pub fn max_quantity(&self) -> f32 {
+        self.max_quantity.max()
+    }
+
+    /// Get the min ABV range as a float
+    pub fn min_abv(&self) -> Option<f32> {
+        self.min_abv.map(|abv| abv.min())
+    }
+
+    /// Get the max ABV range as a float
+    pub fn max_abv(&self) -> Option<f32> {
+        self.max_abv.map(|abv| abv.max())
+    }
+
+    /// Check if this entry has any ABV information.
+    pub fn has_abv(&self) -> bool {
+        // Either both or neither should be present.
+        assert_eq!(self.min_abv.is_some(), self.max_abv.is_some());
+
+        // Given the assertion, only going to check min.
+        self.min_abv.is_some()
+    }
+
+    /// Check if this entry has any volume information.
+    pub fn has_volume(&self) -> bool {
+        self.volume.is_some()
+    }
+}
+
 /*************************************/
 /** Get Drinks query                **/
 /*************************************/

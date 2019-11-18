@@ -21,6 +21,13 @@ use regex::Regex;
 use drink_list::api::{ApiResponse, ResponseStatus};
 use drink_list::db;
 use drink_list::db::{Connection, GetDrinks, Pool};
+use drink_list::reports::{DrinkAggregate, DrinkAggregator};
+
+#[derive(Serialize)]
+struct AggregatedEntry {
+    pub entry: db::Entry,
+    pub aggregate: DrinkAggregate,
+}
 
 fn index() -> impl Responder {
     #[derive(Serialize)]
@@ -42,7 +49,7 @@ fn wakeup() -> impl Responder {
 fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error = Error> {
     #[derive(Serialize)]
     #[serde(rename = "drinks")]
-    struct Drinks(Vec<db::Entry>);
+    struct Drinks(Vec<AggregatedEntry>);
 
     db::execute(
         &pool,
@@ -53,7 +60,19 @@ fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error =
     )
     .from_err()
     .and_then(|res| match res {
-        Ok(drinks) => Ok(HttpResponse::Ok().json(ApiResponse::success(Drinks(drinks)))),
+        Ok(drinks) => {
+            let drinks = Drinks(
+                drinks
+                    .into_iter()
+                    .map(|entry| AggregatedEntry {
+                        aggregate: entry.aggregate(),
+                        entry: entry,
+                    })
+                    .collect(),
+            );
+
+            Ok(HttpResponse::Ok().json(ApiResponse::success(drinks)))
+        }
         Err(_) => Ok(HttpResponse::InternalServerError().into()),
     })
 }
