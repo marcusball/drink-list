@@ -12,6 +12,7 @@ use actix_cors::Cors;
 use actix_web::middleware::Logger;
 use actix_web::*;
 use actix_web::{App, HttpRequest, HttpServer, Responder};
+use chrono::NaiveDate;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use futures::future::Either;
@@ -46,7 +47,24 @@ fn wakeup() -> impl Responder {
     HttpResponse::Ok().json(ApiResponse::success(TestResponse("👍".into())))
 }
 
+/// Route to get all drinks from all time.
 fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error = Error> {
+    get_drinks_internal(pool, None)
+}
+
+fn get_drinks_by_date(
+    (pool, path): (web::Data<Pool>, web::Path<NaiveDate>),
+) -> impl Future<Item = HttpResponse, Error = Error> {
+    let date = path.into_inner();
+    get_drinks_internal(pool, Some((date.clone(), date)))
+}
+
+/// Internal route handler, to allow other routes to all share the same handler code.
+///
+fn get_drinks_internal(
+    pool: web::Data<Pool>,
+    date_range: Option<(NaiveDate, NaiveDate)>,
+) -> impl Future<Item = HttpResponse, Error = Error> {
     #[derive(Serialize)]
     #[serde(rename = "drinks")]
     struct Drinks(Vec<AggregatedEntry>);
@@ -55,7 +73,7 @@ fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error =
         &pool,
         GetDrinks {
             person_id: 1,
-            date_range: None,
+            date_range: date_range,
         },
     )
     .from_err()
@@ -108,7 +126,10 @@ fn main() -> std::io::Result<()> {
             .route("/wakeup", web::get().to(wakeup))
             .service(
                 web::scope("/drink")
-                    .service(web::resource("").route(web::get().to_async(get_drinks))),
+                    .service(web::resource("").route(web::get().to_async(get_drinks)))
+                    .service(
+                        web::resource("/{date}").route(web::get().to_async(get_drinks_by_date)),
+                    ),
             )
 
         /*.service(
