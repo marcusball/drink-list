@@ -48,20 +48,20 @@ fn wakeup() -> impl Responder {
 }
 
 /// Route to get all drinks from all time.
-fn get_drinks(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error = Error> {
-    get_drinks_internal(pool, None)
+fn get_entries(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error = Error> {
+    get_entries_internal(pool, None)
 }
 
-fn get_drinks_by_date(
+fn get_entries_by_date(
     (pool, path): (web::Data<Pool>, web::Path<NaiveDate>),
 ) -> impl Future<Item = HttpResponse, Error = Error> {
     let date = path.into_inner();
-    get_drinks_internal(pool, Some((date.clone(), date)))
+    get_entries_internal(pool, Some((date.clone(), date)))
 }
 
 /// Internal route handler, to allow other routes to all share the same handler code.
 ///
-fn get_drinks_internal(
+fn get_entries_internal(
     pool: web::Data<Pool>,
     date_range: Option<(NaiveDate, NaiveDate)>,
 ) -> impl Future<Item = HttpResponse, Error = Error> {
@@ -126,9 +126,9 @@ fn main() -> std::io::Result<()> {
             .route("/wakeup", web::get().to(wakeup))
             .service(
                 web::scope("/drink")
-                    .service(web::resource("").route(web::get().to_async(get_drinks)))
+                    .service(web::resource("").route(web::get().to_async(get_entries)))
                     .service(
-                        web::resource("/{date}").route(web::get().to_async(get_drinks_by_date)),
+                        web::resource("/{date}").route(web::get().to_async(get_entries_by_date)),
                     ),
             )
 
