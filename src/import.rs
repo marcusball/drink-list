@@ -378,25 +378,6 @@ impl VolumeContext {
             },
             original_unit: unit_str.map(|s| VolumeUnit::from_str(&s).unwrap()),
         })
-
-        /*
-        let volume = match unit_str.as_ref().unwrap().as_ref() {
-            "oz" => Volume::new::<fluid_ounce>(volume_amount),
-            "ml" => Volume::new::<milliliter>(volume_amount),
-            "cl" => Volume::new::<centiliter>(volume_amount),
-            "l" => Volume::new::<liter>(volume_amount),
-            x => {
-                println!("Unrecognized volume unit, '{}'!", x);
-                return None;
-            }
-        };
-
-        Some(VolumeContext {
-            value: volume,
-            approximate: is_approximate,
-            original_unit: unit_str.map(|s| VolumeUnit::from_str(&s).unwrap()),
-        })
-        */
     }
 
     pub fn parse_value(value: &str) -> (bool, f32) {
