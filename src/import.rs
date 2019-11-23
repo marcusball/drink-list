@@ -174,13 +174,13 @@ impl QuantityRange {
         Self::from_str(&entry.quantity.as_ref().expect("No quantity found!"))
     }
 
-    pub fn from_str(quantity: &str) -> QuantityRange {
+    pub fn from_str<S: AsRef<str>>(quantity: S) -> QuantityRange {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(~?\d+(?:\.\d+)?)(?:\s*\-\s*(~?\d+(?:\.\d+)?))?"#).unwrap();
         }
 
-        let captures = RE.captures(quantity).unwrap();
+        let captures = RE.captures(quantity.as_ref()).unwrap();
 
         let cap_index = |index| {
             captures
@@ -257,13 +257,13 @@ impl Abv {
             .expect("A minimum ABV is required!")
     }
 
-    pub fn from_str(abv: &str) -> Result<Option<Abv>> {
+    pub fn from_str<S: AsRef<str>>(abv: S) -> Result<Option<Abv>> {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(~?\d+(?:\.\d+)?)%?(?:\s*\-\s*(~?\d+(?:\.\d+)?)%?)?%"#).unwrap();
         }
 
-        let captures = match RE.captures(abv) {
+        let captures = match RE.captures(abv.as_ref()) {
             Some(c) => c,
             None => return Ok(None),
         };
@@ -360,13 +360,13 @@ impl VolumeContext {
         }
     }
 
-    pub fn from_str(volume: &str) -> Result<Option<VolumeContext>> {
+    pub fn from_str<S: AsRef<str>>(volume: S) -> Result<Option<VolumeContext>> {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(?P<volume>~?\d+(?:\.\d+)?)\s*(?P<unit>\w{2,})"#).unwrap();
         }
 
-        let captures = match RE.captures(volume) {
+        let captures = match RE.captures(volume.as_ref()) {
             Some(c) => c,
             None => {
                 return Ok(None);
