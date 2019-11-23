@@ -17,8 +17,10 @@ CREATE TABLE drink (
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    UNIQUE (name, min_abv, max_abv, multiplier)
+    UNIQUE (name, min_abv, max_abv)
 );
+
+CREATE INDEX drink_name_lower_idx ON drink (LOWER(name));
 
 COMMENT ON TABLE drink IS 'All drinks, identified by name and alcohol content.';
 COMMENT ON COLUMN drink.multiplier IS 'Used when estimating volume content, especially if no ABV is known; Ex: allows for considering 1 double as approximately two units of alcohol.';
@@ -48,6 +50,7 @@ CREATE TABLE entry (
 );
 
 CREATE INDEX ON entry (person_id, drink_id, drank_on);
+
 COMMENT ON COLUMN entry.time_period IS 'The approximate time of day during which this was drank.';
 COMMENT ON COLUMN entry.volume      IS 'The liquid volume of one `quantity` unit of this drink.';
 COMMENT ON COLUMN entry.volume_ml   IS 'The `volume` of the drink entry expressed in milliliters.';
