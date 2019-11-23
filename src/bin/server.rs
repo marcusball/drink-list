@@ -21,10 +21,13 @@ use regex::Regex;
 
 use drink_list::api::{ApiResponse, ResponseStatus};
 use drink_list::db;
-use drink_list::db::{Connection, GetDrinks, Pool};
+use drink_list::db::{Connection, CreateDrink, CreateEntry, GetDrink, GetDrinks, GetEntry, Pool};
+use drink_list::import::{Abv, QuantityRange, VolumeContext};
+use drink_list::models::TimePeriod;
 use drink_list::reports::{DrinkAggregate, DrinkAggregator};
 
 #[derive(Serialize)]
+#[serde(rename = "aggregated_entry")]
 struct AggregatedEntry {
     pub entry: db::Entry,
     pub aggregate: DrinkAggregate,
@@ -95,6 +98,231 @@ fn get_entries_internal(
     })
 }
 
+#[derive(Deserialize)]
+struct EntryForm {
+    pub drank_on: NaiveDate,
+
+    pub time_period: String,
+
+    pub quantity: String,
+
+    pub name: String,
+
+    pub abv: Option<String>,
+
+    pub volume: Option<String>,
+}
+
+fn new_entry(
+    pool: web::Data<Pool>,
+    form: web::Form<EntryForm>,
+) -> impl Future<Item = HttpResponse, Error = Error> {
+    use futures::future;
+
+    let time_period = match TimePeriod::from_str(&form.time_period.to_lowercase()) {
+        Some(time_period) => time_period,
+        None => {
+            info!(
+                "Received invalid time period input, '{}'!",
+                form.time_period
+            );
+            let response = ApiResponse::<()>::from(None)
+                .with_status(ResponseStatus::Fail)
+                .add_message("Invalid time period value!".into());
+            return Either::A(futures::future::ok(
+                HttpResponse::BadRequest().json(response),
+            ));
+        }
+    };
+    // Attempt to parse the quantity string.
+    let quantity = match QuantityRange::from_str(&form.quantity) {
+        Ok(quantity) => quantity,
+        Err(e) => {
+            info!("Received invalid quantity input, '{}'!", form.quantity);
+            let response = ApiResponse::<()>::from(None)
+                .with_status(ResponseStatus::Fail)
+                .add_message("Invalid quantity value!".into());
+            return Either::A(futures::future::ok(
+                HttpResponse::BadRequest().json(response),
+            ));
+        }
+    };
+
+    // Now attempt to parse the ABV string.
+    let abv = match form.abv.as_ref().map(Abv::from_str).transpose() {
+        Ok(abv) => abv.flatten(),
+        Err(e) => {
+            info!(
+                "Received invalid ABV input, '{}'!",
+                form.abv.as_ref().unwrap()
+            );
+            let response = ApiResponse::<()>::from(None)
+                .with_status(ResponseStatus::Fail)
+                .add_message("Invalid ABV value!".into());
+            return Either::A(futures::future::ok(
+                HttpResponse::BadRequest().json(response),
+            ));
+        }
+    };
+
+    // Parse the volume string.
+    let volume = match form
+        .volume
+        .as_ref()
+        .map(VolumeContext::from_str)
+        .transpose()
+    {
+        Ok(volume) => volume.flatten(),
+        Err(e) => {
+            info!(
+                "Received invalid Volume input, '{}'!",
+                form.volume.as_ref().unwrap()
+            );
+            let response = ApiResponse::<()>::from(None)
+                .with_status(ResponseStatus::Fail)
+                .add_message("Invalid Volume value!".into());
+            return Either::A(futures::future::ok(
+                HttpResponse::BadRequest().json(response),
+            ));
+        }
+    };
+
+    // Finally, normalize the name
+    let name = form.name.trim();
+
+    // And attempt to derive a multiplier, if needed.
+    let multiplier = match name.to_lowercase().contains("double") {
+        true => 2.0,
+        false => 1.0,
+    };
+
+    /*********************************************/
+    /*  Closures for database operations         */
+    /*********************************************/
+
+    // Create a new drink record.
+    let create_drink = |pool: &Pool, name: String, abv: Option<Abv>, multiplier: f32| {
+        db::execute(
+            pool,
+            CreateDrink {
+                name,
+                abv,
+                multiplier,
+            },
+        )
+        .from_err()
+        .and_then(|res| res)
+        .map_err(|e| actix_web::Error::from(e))
+    };
+
+    // This closure will attempt to get an existing drink record.
+    // If none is found, it will create a new drink record.
+    let get_or_create_drink = |pool: &Pool, name: String, abv: Option<Abv>, multiplier: f32| {
+        let pool_clone = pool.clone();
+        db::execute(
+            &pool,
+            GetDrink {
+                name: name.clone(),
+                abv: abv.clone(),
+            },
+        )
+        .from_err()
+        .and_then(move |res| match res {
+            Ok(Some(drink)) => Either::A(future::result(Ok(drink))),
+            Ok(None) => Either::B(create_drink(&pool_clone, name, abv, multiplier)),
+            Err(e) => Either::A(future::result(Err(actix_web::Error::from(e)))),
+        })
+    };
+
+    // This closure will create a new entry record.
+    let create_entry = |pool: &Pool,
+                        person_id: i32,
+                        drank_on: NaiveDate,
+                        time_period: TimePeriod,
+                        context: Vec<String>,
+                        drink_id: i32,
+                        quantity: QuantityRange,
+                        volume: Option<VolumeContext>| {
+        db::execute(
+            &pool,
+            CreateEntry {
+                person_id,
+                drank_on,
+                time_period,
+                context,
+                drink_id,
+                quantity,
+                volume,
+            },
+        )
+        .from_err()
+        .and_then(|res| res)
+        .map_err(|e| actix_web::Error::from(e))
+    };
+
+    // This closure will lookup the full details of the given entry.
+    let get_entry = |pool: &Pool, person_id: i32, entry_id: i32| {
+        db::execute(
+            &pool,
+            GetEntry {
+                person_id,
+                entry_id,
+            },
+        )
+        .from_err()
+        .and_then(|res| res)
+        .map_err(|e| actix_web::Error::from(e))
+    };
+
+    /*********************************************/
+    /* Begin actual function execution           */
+    /*********************************************/
+
+    let pool_clone = pool.clone();
+
+    Either::B(
+        // Lookup the drink details if a record exists, otherwise create a new record.
+        get_or_create_drink(&pool, name.to_string(), abv, multiplier)
+            // Now create a new entry using the drink details.
+            .and_then(move |drink| {
+                create_entry(
+                    &pool,
+                    1,
+                    form.drank_on,
+                    time_period,
+                    Vec::new(),
+                    drink.id,
+                    quantity,
+                    volume,
+                )
+            })
+            // Lookup the full details of the entry we just created.
+            .and_then(move |entry| get_entry(&pool_clone, 1, entry.id))
+            // Generate output
+            .then(|res| match res {
+                // All good, return the entry.
+                Ok(Some(entry)) => {
+                    let output = AggregatedEntry {
+                        aggregate: entry.aggregate(),
+                        entry: entry,
+                    };
+
+                    Ok(HttpResponse::Ok().json(ApiResponse::success(output)))
+                }
+                // This case should be impossible; it would only happen if no record was found matching the entry ID.
+                Ok(None) => {
+                    error!("An entry was created but retrieval returned no results.");
+                    Ok(HttpResponse::InternalServerError().into())
+                }
+                // Everything exploded.
+                Err(e) => {
+                    error!("An error occurred: {}", e);
+                    Ok(HttpResponse::InternalServerError().into())
+                }
+            }),
+    )
+}
+
 fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     env_logger::init();
@@ -126,7 +354,11 @@ fn main() -> std::io::Result<()> {
             .route("/wakeup", web::get().to(wakeup))
             .service(
                 web::scope("/drink")
-                    .service(web::resource("").route(web::get().to_async(get_entries)))
+                    .service(
+                        web::resource("")
+                            .route(web::get().to_async(get_entries))
+                            .route(web::post().to_async(new_entry)),
+                    )
                     .service(
                         web::resource("/{date}").route(web::get().to_async(get_entries_by_date)),
                     ),

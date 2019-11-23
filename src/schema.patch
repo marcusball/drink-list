@@ -3,7 +3,7 @@
 @@ -1,6 +1,23 @@
 +#![allow(unused_imports)]
 +
-+#[derive(Debug, SqlType)]
++#[derive(Debug, SqlType, QueryId)]
 +#[postgres(type_name = "realapprox")]
 +pub struct Realapprox;
 +#[derive(Debug, SqlType)]

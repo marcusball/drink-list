@@ -4,6 +4,7 @@ use crate::Result;
 use chrono::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
+use std::error::Error as StdError;
 use std::hash::{Hash, Hasher};
 use uom::si::f32::*;
 use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
@@ -171,16 +172,16 @@ pub struct QuantityRange {
 
 impl QuantityRange {
     pub fn from_entry(entry: &RawEntry) -> QuantityRange {
-        Self::from_str(&entry.quantity.as_ref().expect("No quantity found!"))
+        Self::from_str(&entry.quantity.as_ref().expect("No quantity found!")).unwrap()
     }
 
-    pub fn from_str<S: AsRef<str>>(quantity: S) -> QuantityRange {
+    pub fn from_str<S: AsRef<str>>(quantity: S) -> Result<QuantityRange> {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(~?\d+(?:\.\d+)?)(?:\s*\-\s*(~?\d+(?:\.\d+)?))?"#).unwrap();
         }
 
-        let captures = RE.captures(quantity.as_ref()).unwrap();
+        let captures = RE.captures(quantity.as_ref()).expect("Missing quantity!"); // TODO: Remove Expect
 
         let cap_index = |index| {
             captures
@@ -189,15 +190,18 @@ impl QuantityRange {
                 .filter(|s| *s != "")
         };
 
-        let min = cap_index(1)
-            .map(Self::parse_value)
-            .expect("A minimum quantity is required!");
+        let min = match cap_index(1).map(Self::parse_value) {
+            Some(v) => v,
+            None => {
+                return Err(Error::EntryInputError("Invalid quantity input!".into()));
+            }
+        };
         let max = cap_index(2).map(Self::parse_value).unwrap_or(min);
 
-        QuantityRange {
+        Ok(QuantityRange {
             min: ApproxF32::new(min.1, min.0),
-            max: ApproxF32::new(max.1, min.0),
-        }
+            max: ApproxF32::new(max.1, max.0),
+        })
     }
 
     /// Parse a strings like "2", "1.5", "~3", etc, and return a tuple
@@ -340,8 +344,6 @@ pub struct VolumeContext {
 
 impl VolumeContext {
     pub fn from_entry(entry: &RawEntry) -> Option<VolumeContext> {
-        use std::error::Error as StdError;
-
         if entry.volume.is_none() {
             return None;
         }

@@ -13,7 +13,7 @@ use uom::si::f32::Volume as SiVolume;
 /// What percentage +/- should be applied to approximate values.
 static APPROX_MODIFIER: f32 = 0.1;
 
-#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize, PartialEq)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize, PartialEq, QueryId)]
 #[sql_type = "Realapprox"]
 pub struct ApproxF32 {
     pub num: f32,
@@ -277,7 +277,7 @@ pub struct NewEntry<'a> {
     pub volume_ml: Option<LiquidVolume>,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable, Debug)]
 pub struct Drink {
     pub id: i32,
     pub name: String,

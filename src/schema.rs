@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 
-#[derive(Debug, SqlType)]
+#[derive(Debug, SqlType, QueryId)]
 #[postgres(type_name = "realapprox")]
 pub struct Realapprox;
 #[derive(Debug, SqlType)]
@@ -64,8 +64,4 @@ table! {
 joinable!(entry -> drink (drink_id));
 joinable!(entry -> person (person_id));
 
-allow_tables_to_appear_in_same_query!(
-    drink,
-    entry,
-    person,
-);
+allow_tables_to_appear_in_same_query!(drink, entry, person,);
