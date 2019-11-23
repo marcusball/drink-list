@@ -9,7 +9,6 @@ use serde::Serialize;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use uom::si::f32::Volume as SiVolume;
-use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
 
 /// What percentage +/- should be applied to approximate values.
 static APPROX_MODIFIER: f32 = 0.1;

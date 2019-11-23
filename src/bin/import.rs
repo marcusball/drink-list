@@ -18,7 +18,6 @@ fn establish_connection() -> PgConnection {
 }
 
 fn create_drink(conn: &PgConnection, drink: &Drink) -> models::Drink {
-    use models::ApproxF32;
     use schema::drink;
 
     let new_drink = models::NewDrink {
@@ -43,9 +42,7 @@ fn create_entry(
     quantity: &QuantityRange,
     volume: &Option<VolumeContext>,
 ) -> models::PlainEntry {
-    use models::*;
     use schema::entry;
-    use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
 
     let new_entry = models::NewEntry {
         person_id: 1,
