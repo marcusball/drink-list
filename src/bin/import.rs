@@ -24,14 +24,8 @@ fn create_drink(conn: &PgConnection, drink: &Drink) -> models::Drink {
     let new_drink = models::NewDrink {
         name: drink.name.as_str(),
 
-        min_abv: drink.abv.as_ref().map(|abv| ApproxF32 {
-            num: abv.min,
-            is_approximate: abv.approximate_min,
-        }),
-        max_abv: drink.abv.as_ref().map(|abv| ApproxF32 {
-            num: abv.max,
-            is_approximate: abv.approximate_max,
-        }),
+        min_abv: drink.abv.as_ref().map(|abv| abv.min),
+        max_abv: drink.abv.as_ref().map(|abv| abv.max),
 
         multiplier: drink.multiplier,
     };
@@ -53,45 +47,16 @@ fn create_entry(
     use schema::entry;
     use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
 
-    // This seems like an obvious desire, but I can't figure out
-    // how to get uom to give me the value in the original units.
-    let get_volume = |v: &VolumeContext| -> f32 {
-        match v.original_unit.unwrap() {
-            VolumeUnit::FlOz => v.value.get::<fluid_ounce>(),
-            VolumeUnit::mL => v.value.get::<milliliter>(),
-            VolumeUnit::cL => v.value.get::<centiliter>(),
-            VolumeUnit::L => v.value.get::<liter>(),
-        }
-    };
-
     let new_entry = models::NewEntry {
         person_id: 1,
         drank_on: &date.date,
         time_period: &date.time,
         context: &date.context,
         drink_id: drink_id,
-        min_quantity: &ApproxF32 {
-            num: quantity.min,
-            is_approximate: quantity.approximate_min,
-        },
-        max_quantity: &ApproxF32 {
-            num: quantity.max,
-            is_approximate: quantity.approximate_max,
-        },
-        volume: volume.clone().as_ref().map(|v| models::LiquidVolume {
-            amount: models::ApproxF32 {
-                num: get_volume(v),
-                is_approximate: v.approximate,
-            },
-            unit: v.original_unit.unwrap(),
-        }),
-        volume_ml: volume.clone().as_ref().map(|v| models::LiquidVolume {
-            amount: models::ApproxF32 {
-                num: v.value.get::<milliliter>(),
-                is_approximate: v.approximate,
-            },
-            unit: VolumeUnit::mL,
-        }),
+        min_quantity: &quantity.min,
+        max_quantity: &quantity.max,
+        volume: volume.clone().as_ref().map(|v| v.volume),
+        volume_ml: volume.clone().as_ref().map(|v| v.volume.to_ml()),
     };
 
     diesel::insert_into(entry::table)

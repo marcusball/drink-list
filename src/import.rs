@@ -1,4 +1,4 @@
-use crate::models::{TimePeriod, VolumeUnit};
+use crate::models::{ApproxF32, LiquidVolume, TimePeriod, VolumeUnit};
 use chrono::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
@@ -163,10 +163,8 @@ impl DateContext {
 
 #[derive(PartialEq, Debug)]
 pub struct QuantityRange {
-    pub min: f32,
-    pub max: f32,
-    pub approximate_min: bool,
-    pub approximate_max: bool,
+    pub min: ApproxF32,
+    pub max: ApproxF32,
 }
 
 impl QuantityRange {
@@ -193,10 +191,8 @@ impl QuantityRange {
         let max = cap_index(2).map(Self::parse_value).unwrap_or(min);
 
         QuantityRange {
-            min: min.1,
-            max: max.1,
-            approximate_min: min.0,
-            approximate_max: max.0,
+            min: ApproxF32::new(min.1, min.0),
+            max: ApproxF32::new(max.1, min.0),
         }
     }
 
@@ -221,32 +217,30 @@ impl QuantityRange {
     pub fn print(&self) -> String {
         let mut display = String::new();
 
-        if self.approximate_min {
+        if self.min.is_approximate {
             display.push_str("~");
         }
 
-        display.push_str(&format!("{:.2}", self.min));
+        display.push_str(&format!("{:.2}", self.min.num));
 
-        if self.min != self.max || self.approximate_min != self.approximate_max {
+        if self.min != self.max {
             display.push('-');
 
-            if self.approximate_max {
+            if self.max.is_approximate {
                 display.push_str("~");
             }
 
-            display.push_str(&format!("{:.2}", self.max));
+            display.push_str(&format!("{:.2}", self.max.num));
         }
 
         display
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct Abv {
-    pub min: f32,
-    pub max: f32,
-    pub approximate_min: bool,
-    pub approximate_max: bool,
+    pub min: ApproxF32,
+    pub max: ApproxF32,
 }
 
 impl Abv {
@@ -278,10 +272,8 @@ impl Abv {
         let max = cap_index(2).map(Self::parse_value).unwrap_or(min);
 
         Some(Abv {
-            min: min.1,
-            max: max.1,
-            approximate_min: min.0,
-            approximate_max: max.0,
+            min: ApproxF32::new(min.1, min.0),
+            max: ApproxF32::new(max.1, max.0),
         })
     }
 
@@ -306,20 +298,20 @@ impl Abv {
     pub fn print(&self) -> String {
         let mut display = String::new();
 
-        if self.approximate_min {
+        if self.min.is_approximate {
             display.push_str("~");
         }
 
-        display.push_str(&format!("{:.1}", self.min));
+        display.push_str(&format!("{:.1}", self.min.num));
 
-        if self.min != self.max || self.approximate_min != self.approximate_max {
+        if self.min != self.max {
             display.push('-');
 
-            if self.approximate_max {
+            if self.max.is_approximate {
                 display.push_str("~");
             }
 
-            display.push_str(&format!("{:.1}", self.max));
+            display.push_str(&format!("{:.1}", self.max.num));
         }
 
         display.push('%');
@@ -328,29 +320,8 @@ impl Abv {
     }
 }
 
-impl PartialEq for Abv {
-    fn eq(&self, other: &Abv) -> bool {
-        ((self.min * 100.0).trunc() as i32) == ((other.min * 100.0).trunc() as i32)
-            && ((self.max * 100.0).trunc() as i32) == ((other.max * 100.0).trunc() as i32)
-            && self.approximate_min == other.approximate_min
-            && self.approximate_max == other.approximate_max
-    }
-}
-
-impl Eq for Abv {}
-
-impl Hash for Abv {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        ((self.min * 100.0).trunc() as i32).hash(state);
-        ((self.max * 100.0).trunc() as i32).hash(state);
-        self.approximate_min.hash(state);
-        self.approximate_max.hash(state);
-    }
-}
-
 pub struct VolumeContext {
-    pub value: Volume,
-    pub approximate: bool,
+    pub volume: LiquidVolume,
     pub original_unit: Option<VolumeUnit>,
 }
 
@@ -389,6 +360,26 @@ impl VolumeContext {
 
         let (is_approximate, volume_amount) = Self::parse_value(volume_str.as_ref().unwrap());
 
+        let unit = match VolumeUnit::from_str(unit_str.as_ref().unwrap().as_ref()) {
+            Some(unit) => unit,
+            None => {
+                println!(
+                    "Unrecognized volume unit, '{}'!",
+                    unit_str.as_ref().unwrap()
+                );
+                return None;
+            }
+        };
+
+        Some(VolumeContext {
+            volume: LiquidVolume {
+                amount: ApproxF32::new(volume_amount, is_approximate),
+                unit: unit,
+            },
+            original_unit: unit_str.map(|s| VolumeUnit::from_str(&s).unwrap()),
+        })
+
+        /*
         let volume = match unit_str.as_ref().unwrap().as_ref() {
             "oz" => Volume::new::<fluid_ounce>(volume_amount),
             "ml" => Volume::new::<milliliter>(volume_amount),
@@ -405,6 +396,7 @@ impl VolumeContext {
             approximate: is_approximate,
             original_unit: unit_str.map(|s| VolumeUnit::from_str(&s).unwrap()),
         })
+        */
     }
 
     pub fn parse_value(value: &str) -> (bool, f32) {
@@ -418,34 +410,15 @@ impl VolumeContext {
     }
 
     pub fn print(&self) -> String {
-        use uom::fmt::DisplayStyle;
-        use uom::si::fmt::Arguments;
-        use uom::si::volume::Dimension;
-
-        lazy_static! {
-            static ref FMT_OZ: Arguments<Dimension, fluid_ounce> =
-                Volume::format_args(fluid_ounce, DisplayStyle::Abbreviation);
-            static ref FMT_ML: Arguments<Dimension, milliliter> =
-                Volume::format_args(milliliter, DisplayStyle::Abbreviation);
-            static ref FMT_CL: Arguments<Dimension, centiliter> =
-                Volume::format_args(centiliter, DisplayStyle::Abbreviation);
-            static ref FMT_L: Arguments<Dimension, liter> =
-                Volume::format_args(liter, DisplayStyle::Abbreviation);
-        }
-
         let mut display = String::new();
 
-        if self.approximate {
+        if self.volume.amount.is_approximate {
             display.push('~');
         }
 
-        display.push_str(&match self.original_unit.unwrap() {
-            VolumeUnit::FlOz => format!("{}", FMT_OZ.with(self.value)),
-            VolumeUnit::mL => format!("{}", FMT_ML.with(self.value)),
-            VolumeUnit::cL => format!("{}", FMT_CL.with(self.value)),
-            VolumeUnit::L => format!("{}", FMT_L.with(self.value)),
-            x => panic!("Unrecognized original volume unit, '{}'!", x),
-        });
+        display.push_str(&format!("{:.2}", self.volume.amount.num));
+        display.push_str(" ");
+        display.push_str(self.volume.unit.to_str());
 
         display
     }

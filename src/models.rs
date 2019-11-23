@@ -6,12 +6,15 @@ use diesel::pg::Pg;
 use diesel::serialize::{self, IsNull, Output, ToSql, WriteTuple};
 use diesel::sql_types::{Bool, Float4, Record};
 use serde::Serialize;
+use std::hash::{Hash, Hasher};
 use std::io::Write;
+use uom::si::f32::Volume as SiVolume;
+use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
 
 /// What percentage +/- should be applied to approximate values.
 static APPROX_MODIFIER: f32 = 0.1;
 
-#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize)]
+#[derive(Clone, Copy, Debug, FromSqlRow, AsExpression, Serialize, PartialEq)]
 #[sql_type = "Realapprox"]
 pub struct ApproxF32 {
     pub num: f32,
@@ -19,6 +22,13 @@ pub struct ApproxF32 {
 }
 
 impl ApproxF32 {
+    pub fn new(num: f32, is_approximate: bool) -> ApproxF32 {
+        ApproxF32 {
+            num,
+            is_approximate,
+        }
+    }
+
     #[inline]
     pub fn min(&self) -> f32 {
         // This is a (probably dumb, unnecessary) attempt to avoid a conditional
@@ -39,6 +49,13 @@ impl ApproxF32 {
             * (1.0
                 + (APPROX_MODIFIER
                     + ((!self.is_approximate as i32) as f32 * -1.0 * APPROX_MODIFIER)))
+    }
+}
+
+impl Hash for ApproxF32 {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        ((self.num * 100.0).trunc() as i32).hash(state);
+        self.is_approximate.hash(state);
     }
 }
 
@@ -66,6 +83,32 @@ pub enum VolumeUnit {
 pub struct LiquidVolume {
     pub amount: ApproxF32,
     pub unit: VolumeUnit,
+}
+
+impl LiquidVolume {
+    pub fn to_si_volume(&self) -> SiVolume {
+        use uom::si::volume::{centiliter, fluid_ounce, liter, milliliter};
+
+        match self.unit {
+            VolumeUnit::FlOz => SiVolume::new::<fluid_ounce>(self.amount.num),
+            VolumeUnit::mL => SiVolume::new::<milliliter>(self.amount.num),
+            VolumeUnit::cL => SiVolume::new::<centiliter>(self.amount.num),
+            VolumeUnit::L => SiVolume::new::<liter>(self.amount.num),
+        }
+    }
+
+    pub fn to_ml(&self) -> LiquidVolume {
+        use uom::si::volume::milliliter;
+
+        let ml = self.to_si_volume().get::<milliliter>();
+        let mut amount = self.amount.clone();
+        amount.num = ml;
+
+        LiquidVolume {
+            unit: VolumeUnit::mL,
+            amount: amount,
+        }
+    }
 }
 
 impl TimePeriod {
