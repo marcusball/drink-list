@@ -1,4 +1,6 @@
+use crate::error::Error;
 use crate::models::{ApproxF32, LiquidVolume, TimePeriod, VolumeUnit};
+use crate::Result;
 use chrono::prelude::*;
 use regex::Regex;
 use std::collections::HashMap;
@@ -169,14 +171,16 @@ pub struct QuantityRange {
 
 impl QuantityRange {
     pub fn from_entry(entry: &RawEntry) -> QuantityRange {
+        Self::from_str(&entry.quantity.as_ref().expect("No quantity found!"))
+    }
+
+    pub fn from_str(quantity: &str) -> QuantityRange {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(~?\d+(?:\.\d+)?)(?:\s*\-\s*(~?\d+(?:\.\d+)?))?"#).unwrap();
         }
 
-        let captures = RE
-            .captures(&entry.quantity.as_ref().expect("No quantity found!"))
-            .unwrap();
+        let captures = RE.captures(quantity).unwrap();
 
         let cap_index = |index| {
             captures
@@ -245,18 +249,23 @@ pub struct Abv {
 
 impl Abv {
     pub fn from_entry(entry: &RawEntry) -> Option<Abv> {
+        if entry.abv.is_none() {
+            return None;
+        }
+
+        Self::from_str(&entry.abv.as_ref().expect("No ABV found!"))
+            .expect("A minimum ABV is required!")
+    }
+
+    pub fn from_str(abv: &str) -> Result<Option<Abv>> {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r#"(~?\d+(?:\.\d+)?)%?(?:\s*\-\s*(~?\d+(?:\.\d+)?)%?)?%"#).unwrap();
         }
 
-        if entry.abv.is_none() {
-            return None;
-        }
-
-        let captures = match RE.captures(&entry.abv.as_ref().expect("No ABV found!")) {
+        let captures = match RE.captures(abv) {
             Some(c) => c,
-            None => return None,
+            None => return Ok(None),
         };
 
         let cap_index = |index| {
@@ -266,15 +275,19 @@ impl Abv {
                 .filter(|s| *s != "")
         };
 
-        let min = cap_index(1)
-            .map(Self::parse_value)
-            .expect("A minimum ABV is required!");
+        let min = match cap_index(1).map(Self::parse_value) {
+            Some(v) => v,
+            None => {
+                return Err(Error::EntryInputError("A minimum ABV is required!".into()));
+            }
+        };
+
         let max = cap_index(2).map(Self::parse_value).unwrap_or(min);
 
-        Some(Abv {
+        Ok(Some(Abv {
             min: ApproxF32::new(min.1, min.0),
             max: ApproxF32::new(max.1, max.0),
-        })
+        }))
     }
 
     /// Parse a strings like "2", "1.5", "~3", etc, and return a tuple
@@ -327,18 +340,36 @@ pub struct VolumeContext {
 
 impl VolumeContext {
     pub fn from_entry(entry: &RawEntry) -> Option<VolumeContext> {
-        lazy_static! {
-            static ref RE: Regex =
-                Regex::new(r#"(?P<volume>~?\d+(?:\.\d+)?)\s*(?P<unit>\w{2,})"#).unwrap();
-        }
+        use std::error::Error as StdError;
+
         if entry.volume.is_none() {
             return None;
         }
 
-        let captures = match RE.captures(entry.volume.as_ref().unwrap()) {
+        match Self::from_str(entry.volume.as_ref().unwrap()) {
+            Ok(volume) => volume,
+            Err(e) => {
+                match e {
+                    Error::EntryInputError(message) => {
+                        println!("{}", message);
+                    }
+                    e => println!("{}", e.description()),
+                };
+                return None;
+            }
+        }
+    }
+
+    pub fn from_str(volume: &str) -> Result<Option<VolumeContext>> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"(?P<volume>~?\d+(?:\.\d+)?)\s*(?P<unit>\w{2,})"#).unwrap();
+        }
+
+        let captures = match RE.captures(volume) {
             Some(c) => c,
             None => {
-                return None;
+                return Ok(None);
             }
         };
 
@@ -355,7 +386,7 @@ impl VolumeContext {
         let unit_str = cap_str("unit");
 
         if volume_str.is_none() || unit_str.is_none() {
-            return None;
+            return Ok(None);
         }
 
         let (is_approximate, volume_amount) = Self::parse_value(volume_str.as_ref().unwrap());
@@ -363,21 +394,20 @@ impl VolumeContext {
         let unit = match VolumeUnit::from_str(unit_str.as_ref().unwrap().as_ref()) {
             Some(unit) => unit,
             None => {
-                println!(
+                return Err(Error::EntryInputError(format!(
                     "Unrecognized volume unit, '{}'!",
                     unit_str.as_ref().unwrap()
-                );
-                return None;
+                )));
             }
         };
 
-        Some(VolumeContext {
+        Ok(Some(VolumeContext {
             volume: LiquidVolume {
                 amount: ApproxF32::new(volume_amount, is_approximate),
                 unit: unit,
             },
             original_unit: unit_str.map(|s| VolumeUnit::from_str(&s).unwrap()),
-        })
+        }))
     }
 
     pub fn parse_value(value: &str) -> (bool, f32) {

@@ -17,3 +17,5 @@ pub mod import;
 pub mod models;
 pub mod reports;
 pub mod schema;
+
+pub type Result<T> = std::result::Result<T, error::Error>;

@@ -15,6 +15,8 @@ pub enum Error {
     DieselError(DieselError),
 
     PoolError(r2d2::PoolError),
+
+    EntryInputError(String),
 }
 
 impl std::error::Error for Error {
@@ -24,6 +26,7 @@ impl std::error::Error for Error {
             Self::BlockingError => "Blocking Error!",
             Self::DieselError(e) => e.description(),
             Self::PoolError(e) => e.description(),
+            Self::EntryInputError(message) => "Invalid Entry input!",
         }
     }
 
@@ -33,6 +36,7 @@ impl std::error::Error for Error {
             Self::PoolError(e) => Some(e),
             Self::SessionNotFound => None,
             Self::BlockingError => None,
+            Self::EntryInputError(_) => None,
         }
     }
 }
