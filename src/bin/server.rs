@@ -92,7 +92,7 @@ fn get_entries_internal(
                     .collect(),
             );
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(drinks)))
+            Ok(ApiResponse::success(drinks).into())
         }
         Err(_) => Ok(HttpResponse::InternalServerError().into()),
     })
@@ -126,12 +126,8 @@ fn new_entry(
                 "Received invalid time period input, '{}'!",
                 form.time_period
             );
-            let response = ApiResponse::<()>::from(None)
-                .with_status(ResponseStatus::Fail)
-                .add_message("Invalid time period value!".into());
-            return Either::A(futures::future::ok(
-                HttpResponse::BadRequest().json(response),
-            ));
+            let response = ApiResponse::error_message("Invalid time period value!");
+            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
     // Attempt to parse the quantity string.
@@ -139,12 +135,8 @@ fn new_entry(
         Ok(quantity) => quantity,
         Err(e) => {
             info!("Received invalid quantity input, '{}'!", form.quantity);
-            let response = ApiResponse::<()>::from(None)
-                .with_status(ResponseStatus::Fail)
-                .add_message("Invalid quantity value!".into());
-            return Either::A(futures::future::ok(
-                HttpResponse::BadRequest().json(response),
-            ));
+            let response = ApiResponse::error_message("Invalid quantity value!");
+            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
 
@@ -156,12 +148,8 @@ fn new_entry(
                 "Received invalid ABV input, '{}'!",
                 form.abv.as_ref().unwrap()
             );
-            let response = ApiResponse::<()>::from(None)
-                .with_status(ResponseStatus::Fail)
-                .add_message("Invalid ABV value!".into());
-            return Either::A(futures::future::ok(
-                HttpResponse::BadRequest().json(response),
-            ));
+            let response = ApiResponse::error_message("Invalid ABV value!");
+            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
 
@@ -178,12 +166,8 @@ fn new_entry(
                 "Received invalid Volume input, '{}'!",
                 form.volume.as_ref().unwrap()
             );
-            let response = ApiResponse::<()>::from(None)
-                .with_status(ResponseStatus::Fail)
-                .add_message("Invalid Volume value!".into());
-            return Either::A(futures::future::ok(
-                HttpResponse::BadRequest().json(response),
-            ));
+            let response = ApiResponse::error_message("Invalid Volume value!");
+            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
 
@@ -192,12 +176,8 @@ fn new_entry(
 
     // Return an error if the name is empty.
     if name.is_empty() {
-        let response = ApiResponse::<()>::from(None)
-            .with_status(ResponseStatus::Fail)
-            .add_message("Entry name can not be empty!".into());
-        return Either::A(futures::future::ok(
-            HttpResponse::BadRequest().json(response),
-        ));
+        let response = ApiResponse::error_message("Entry name can not be empty!");
+        return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
     }
 
     // And attempt to derive a multiplier, if needed.
@@ -317,7 +297,7 @@ fn new_entry(
                         entry: entry,
                     };
 
-                    Ok(HttpResponse::Ok().json(ApiResponse::success(output)))
+                    Ok(ApiResponse::success(output).into())
                 }
                 // This case should be impossible; it would only happen if no record was found matching the entry ID.
                 Ok(None) => {

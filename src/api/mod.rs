@@ -20,7 +20,7 @@ pub enum ResponseStatus {
 pub struct ApiResponseEnvelope<T: Serialize>(T);
 
 #[derive(Serialize)]
-pub struct ApiResponse<T>
+pub struct ApiResponse<T = ()>
 where
     T: Serialize,
 {
@@ -93,12 +93,29 @@ where
         self
     }
 
-    pub fn add_message(mut self, message: String) -> ApiResponse<T> {
+    pub fn add_message<S: Into<String>>(mut self, message: S) -> ApiResponse<T> {
         if self.messages.is_none() {
             self.messages = Some(Vec::new());
         }
 
-        self.messages.as_mut().unwrap().push(message);
+        self.messages.as_mut().unwrap().push(message.into());
         self
+    }
+}
+
+impl ApiResponse<()> {
+    #[allow(dead_code)]
+    pub fn error_message<S: Into<String>>(message: S) -> ApiResponse<()> {
+        ApiResponse {
+            status: ResponseStatus::Error,
+            data: None,
+            messages: Some(vec![message.into()]),
+        }
+    }
+}
+
+impl<T: Serialize> From<ApiResponse<T>> for actix_web::web::HttpResponse<actix_web::dev::Body> {
+    fn from(response: ApiResponse<T>) -> actix_web::web::HttpResponse<actix_web::dev::Body> {
+        actix_web::web::HttpResponse::Ok().json(response)
     }
 }
