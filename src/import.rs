@@ -181,7 +181,12 @@ impl QuantityRange {
                 Regex::new(r#"(~?\d+(?:\.\d+)?)(?:\s*\-\s*(~?\d+(?:\.\d+)?))?"#).unwrap();
         }
 
-        let captures = RE.captures(quantity.as_ref()).expect("Missing quantity!"); // TODO: Remove Expect
+        let captures = match RE.captures(quantity.as_ref()) {
+            Some(captures) => captures,
+            None => {
+                return Err(Error::EntryInputError("Missing required quantity!".into()));
+            }
+        };
 
         let cap_index = |index| {
             captures
