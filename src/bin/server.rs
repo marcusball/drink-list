@@ -190,6 +190,16 @@ fn new_entry(
     // Finally, normalize the name
     let name = form.name.trim();
 
+    // Return an error if the name is empty.
+    if name.is_empty() {
+        let response = ApiResponse::<()>::from(None)
+            .with_status(ResponseStatus::Fail)
+            .add_message("Entry name can not be empty!".into());
+        return Either::A(futures::future::ok(
+            HttpResponse::BadRequest().json(response),
+        ));
+    }
+
     // And attempt to derive a multiplier, if needed.
     let multiplier = match name.to_lowercase().contains("double") {
         true => 2.0,
