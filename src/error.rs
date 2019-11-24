@@ -1,7 +1,8 @@
-use actix_web::error::{BlockingError, ResponseError};
+use actix_web::error::ResponseError;
 use actix_web::Error as ActixError;
 use diesel::r2d2;
 use diesel::result::Error as DieselError;
+use futures::channel::oneshot::Canceled as FutureCanceled;
 use std::convert::From;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -10,11 +11,11 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub enum Error {
     SessionNotFound,
 
-    BlockingError,
-
     DieselError(DieselError),
 
     PoolError(r2d2::PoolError),
+
+    FutureCanceled(FutureCanceled),
 
     EntryInputError(String),
 }
@@ -23,9 +24,9 @@ impl std::error::Error for Error {
     fn description(&self) -> &str {
         match self {
             Self::SessionNotFound => "Session not found!",
-            Self::BlockingError => "Blocking Error!",
             Self::DieselError(e) => e.description(),
             Self::PoolError(e) => e.description(),
+            Self::FutureCanceled(e) => e.description(),
             Self::EntryInputError(message) => "Invalid Entry input!",
         }
     }
@@ -34,23 +35,14 @@ impl std::error::Error for Error {
         match self {
             Self::DieselError(e) => Some(e),
             Self::PoolError(e) => Some(e),
+            Self::FutureCanceled(e) => Some(e),
             Self::SessionNotFound => None,
-            Self::BlockingError => None,
             Self::EntryInputError(_) => None,
         }
     }
 }
 
 impl ResponseError for Error {}
-
-impl<E> From<BlockingError<E>> for Error
-where
-    E: std::fmt::Debug,
-{
-    fn from(e: BlockingError<E>) -> Error {
-        Error::BlockingError
-    }
-}
 
 impl From<DieselError> for Error {
     fn from(e: DieselError) -> Error {
@@ -61,5 +53,11 @@ impl From<DieselError> for Error {
 impl From<r2d2::PoolError> for Error {
     fn from(e: r2d2::PoolError) -> Error {
         Error::PoolError(e)
+    }
+}
+
+impl From<FutureCanceled> for Error {
+    fn from(e: FutureCanceled) -> Error {
+        Error::FutureCanceled(e)
     }
 }

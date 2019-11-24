@@ -7,6 +7,7 @@ use diesel::prelude::*;
 use diesel::r2d2;
 use diesel::sql_types::Text;
 use futures::future::Future;
+use futures::prelude::*;
 use serde::Serialize;
 
 use std::marker::Send;
@@ -25,18 +26,27 @@ pub type Connection = r2d2::PooledConnection<r2d2::ConnectionManager<PgConnectio
 sql_function!(fn lower(x: Text) -> Text);
 
 pub trait Query {
-    type Result: Send;
+    type Output: Send;
 
-    fn execute(&self, conn: Connection) -> Self::Result;
+    fn execute(&self, conn: Connection) -> Result<Self::Output>;
 }
 
 pub fn execute<T: Query + Send + 'static>(
     pool: &Pool,
     query: T,
-) -> impl Future<Item = T::Result, Error = Error> {
+) -> impl Future<Output = Result<T::Output>> {
+    use futures::channel::oneshot::Canceled;
+    use std::result::Result as StdResult;
     let pool = pool.clone();
 
-    web::block::<_, _, Error>(move || Ok(query.execute(pool.get()?))).from_err()
+    web::block::<_, _>(move || Ok(query.execute(pool.get()?))).map(
+        |res: StdResult<Result<Result<T::Output>>, Canceled>| match res {
+            Ok(Ok(Ok(r))) => Ok(r),
+            Ok(Ok(Err(e))) => Err(Error::from(e)),
+            Ok(Err(e)) => Err(Error::from(e)),
+            Err(e) => Err(Error::from(e)),
+        },
+    )
 }
 
 #[derive(Queryable, Serialize)]
@@ -109,9 +119,9 @@ pub struct GetDrinks {
 }
 
 impl Query for GetDrinks {
-    type Result = Result<Vec<Entry>>;
+    type Output = Vec<Entry>;
 
-    fn execute(&self, conn: Connection) -> Self::Result {
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
         use crate::schema::drink;
         use crate::schema::drink::dsl::*;
         use crate::schema::entry;
@@ -170,9 +180,9 @@ pub struct GetEntry {
 }
 
 impl Query for GetEntry {
-    type Result = Result<Option<Entry>>;
+    type Output = Option<Entry>;
 
-    fn execute(&self, conn: Connection) -> Self::Result {
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
         use crate::schema::drink;
         use crate::schema::drink::dsl::*;
         use crate::schema::entry;
@@ -217,9 +227,9 @@ pub struct GetDrink {
 }
 
 impl Query for GetDrink {
-    type Result = Result<Option<Drink>>;
+    type Output = Option<Drink>;
 
-    fn execute(&self, conn: Connection) -> Self::Result {
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
         use super::schema::drink::dsl::*;
 
         let min = self.abv.as_ref().map(|abv| abv.min);
@@ -247,9 +257,9 @@ pub struct CreateDrink {
 }
 
 impl Query for CreateDrink {
-    type Result = Result<Drink>;
+    type Output = Drink;
 
-    fn execute(&self, conn: Connection) -> Self::Result {
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
         use super::schema::drink;
 
         let min = self.abv.as_ref().map(|abv| abv.min);
@@ -284,9 +294,9 @@ pub struct CreateEntry {
 }
 
 impl Query for CreateEntry {
-    type Result = Result<models::PlainEntry>;
+    type Output = models::PlainEntry;
 
-    fn execute(&self, conn: Connection) -> Self::Result {
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
         use schema::entry;
 
         let new_entry = models::NewEntry {

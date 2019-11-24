@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 #[macro_use]
 extern crate serde;
 #[macro_use]
@@ -16,6 +18,8 @@ use chrono::NaiveDate;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use futures::future::Either;
+use futures::future::TryFutureExt;
+use futures::prelude::*;
 use futures::Future;
 use regex::Regex;
 
@@ -26,6 +30,8 @@ use drink_list::import::{Abv, QuantityRange, VolumeContext};
 use drink_list::models::TimePeriod;
 use drink_list::reports::{DrinkAggregate, DrinkAggregator};
 
+type ActixResult<T> = std::result::Result<T, actix_web::error::Error>;
+
 #[derive(Serialize)]
 #[serde(rename = "aggregated_entry")]
 struct AggregatedEntry {
@@ -33,7 +39,7 @@ struct AggregatedEntry {
     pub aggregate: DrinkAggregate,
 }
 
-fn index() -> impl Responder {
+async fn index() -> impl Responder {
     #[derive(Serialize)]
     #[serde(rename = "message")]
     struct TestResponse(String);
@@ -42,7 +48,7 @@ fn index() -> impl Responder {
 }
 
 // Dummy method. Just wanted a route for the front-end to ping to make up the heroku instance.
-fn wakeup() -> impl Responder {
+async fn wakeup() -> impl Responder {
     #[derive(Serialize)]
     #[serde(rename = "message")]
     struct TestResponse(String);
@@ -51,23 +57,23 @@ fn wakeup() -> impl Responder {
 }
 
 /// Route to get all drinks from all time.
-fn get_entries(pool: web::Data<Pool>) -> impl Future<Item = HttpResponse, Error = Error> {
-    get_entries_internal(pool, None)
+async fn get_entries(pool: web::Data<Pool>) -> ActixResult<HttpResponse> {
+    get_entries_internal(pool, None).await
 }
 
-fn get_entries_by_date(
+async fn get_entries_by_date(
     (pool, path): (web::Data<Pool>, web::Path<NaiveDate>),
-) -> impl Future<Item = HttpResponse, Error = Error> {
+) -> ActixResult<HttpResponse> {
     let date = path.into_inner();
-    get_entries_internal(pool, Some((date.clone(), date)))
+    get_entries_internal(pool, Some((date.clone(), date))).await
 }
 
 /// Internal route handler, to allow other routes to all share the same handler code.
 ///
-fn get_entries_internal(
+async fn get_entries_internal(
     pool: web::Data<Pool>,
     date_range: Option<(NaiveDate, NaiveDate)>,
-) -> impl Future<Item = HttpResponse, Error = Error> {
+) -> ActixResult<HttpResponse> {
     #[derive(Serialize)]
     #[serde(rename = "drinks")]
     struct Drinks(Vec<AggregatedEntry>);
@@ -79,9 +85,8 @@ fn get_entries_internal(
             date_range: date_range,
         },
     )
-    .from_err()
-    .and_then(|res| match res {
-        Ok(drinks) => {
+    .and_then(|drinks| {
+        async move {
             let drinks = Drinks(
                 drinks
                     .into_iter()
@@ -92,10 +97,11 @@ fn get_entries_internal(
                     .collect(),
             );
 
-            Ok(ApiResponse::success(drinks).into())
+            Ok(HttpResponse::from(ApiResponse::success(drinks)))
         }
-        Err(_) => Ok(HttpResponse::InternalServerError().into()),
     })
+    .map_err(|e| actix_web::Error::from(e))
+    .await
 }
 
 #[derive(Deserialize)]
@@ -116,7 +122,7 @@ struct EntryForm {
 fn new_entry(
     pool: web::Data<Pool>,
     form: web::Form<EntryForm>,
-) -> impl Future<Item = HttpResponse, Error = Error> {
+) -> impl Future<Output = Result<HttpResponse>> {
     use futures::future;
 
     let time_period = match TimePeriod::from_str(&form.time_period.to_lowercase()) {
@@ -127,7 +133,7 @@ fn new_entry(
                 form.time_period
             );
             let response = ApiResponse::error_message("Invalid time period value!");
-            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
+            return Either::Left(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
     // Attempt to parse the quantity string.
@@ -136,7 +142,7 @@ fn new_entry(
         Err(e) => {
             info!("Received invalid quantity input, '{}'!", form.quantity);
             let response = ApiResponse::error_message("Invalid quantity value!");
-            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
+            return Either::Left(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
 
@@ -149,7 +155,7 @@ fn new_entry(
                 form.abv.as_ref().unwrap()
             );
             let response = ApiResponse::error_message("Invalid ABV value!");
-            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
+            return Either::Left(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
 
@@ -167,7 +173,7 @@ fn new_entry(
                 form.volume.as_ref().unwrap()
             );
             let response = ApiResponse::error_message("Invalid Volume value!");
-            return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
+            return Either::Left(future::ok(HttpResponse::BadRequest().json(response)));
         }
     };
 
@@ -177,7 +183,7 @@ fn new_entry(
     // Return an error if the name is empty.
     if name.is_empty() {
         let response = ApiResponse::error_message("Entry name can not be empty!");
-        return Either::A(future::ok(HttpResponse::BadRequest().json(response)));
+        return Either::Left(future::ok(HttpResponse::BadRequest().json(response)));
     }
 
     // And attempt to derive a multiplier, if needed.
@@ -200,9 +206,10 @@ fn new_entry(
                 multiplier,
             },
         )
-        .from_err()
+        /*
+        .err_into()
         .and_then(|res| res)
-        .map_err(|e| actix_web::Error::from(e))
+        .map_err(|e| actix_web::Error::from(e))*/
     };
 
     // This closure will attempt to get an existing drink record.
@@ -216,11 +223,9 @@ fn new_entry(
                 abv: abv.clone(),
             },
         )
-        .from_err()
         .and_then(move |res| match res {
-            Ok(Some(drink)) => Either::A(future::result(Ok(drink))),
-            Ok(None) => Either::B(create_drink(&pool_clone, name, abv, multiplier)),
-            Err(e) => Either::A(future::result(Err(actix_web::Error::from(e)))),
+            Some(drink) => Either::Left(future::ready(Ok(drink))),
+            None => Either::Right(create_drink(&pool_clone, name, abv, multiplier)),
         })
     };
 
@@ -244,10 +249,10 @@ fn new_entry(
                 quantity,
                 volume,
             },
-        )
-        .from_err()
-        .and_then(|res| res)
-        .map_err(|e| actix_web::Error::from(e))
+        ) /*
+          .from_err()
+          .and_then(|res| res)
+          .map_err(|e| actix_web::Error::from(e))*/
     };
 
     // This closure will lookup the full details of the given entry.
@@ -258,10 +263,10 @@ fn new_entry(
                 person_id,
                 entry_id,
             },
-        )
-        .from_err()
-        .and_then(|res| res)
-        .map_err(|e| actix_web::Error::from(e))
+        ) /*
+          .from_err()
+          .and_then(|res| res)
+          .map_err(|e| actix_web::Error::from(e))*/
     };
 
     /*********************************************/
@@ -270,7 +275,7 @@ fn new_entry(
 
     let pool_clone = pool.clone();
 
-    Either::B(
+    Either::Right(
         // Lookup the drink details if a record exists, otherwise create a new record.
         get_or_create_drink(&pool, name.to_string(), abv, multiplier)
             // Now create a new entry using the drink details.
@@ -289,25 +294,29 @@ fn new_entry(
             // Lookup the full details of the entry we just created.
             .and_then(move |entry| get_entry(&pool_clone, 1, entry.id))
             // Generate output
-            .then(|res| match res {
-                // All good, return the entry.
-                Ok(Some(entry)) => {
-                    let output = AggregatedEntry {
-                        aggregate: entry.aggregate(),
-                        entry: entry,
-                    };
+            .then(|res| {
+                async move {
+                    match res {
+                        // All good, return the entry.
+                        Ok(Some(entry)) => {
+                            let output = AggregatedEntry {
+                                aggregate: entry.aggregate(),
+                                entry: entry,
+                            };
 
-                    Ok(ApiResponse::success(output).into())
-                }
-                // This case should be impossible; it would only happen if no record was found matching the entry ID.
-                Ok(None) => {
-                    error!("An entry was created but retrieval returned no results.");
-                    Ok(HttpResponse::InternalServerError().into())
-                }
-                // Everything exploded.
-                Err(e) => {
-                    error!("An error occurred: {}", e);
-                    Ok(HttpResponse::InternalServerError().into())
+                            Ok(ApiResponse::success(output).into())
+                        }
+                        // This case should be impossible; it would only happen if no record was found matching the entry ID.
+                        Ok(None) => {
+                            error!("An entry was created but retrieval returned no results.");
+                            Ok(HttpResponse::InternalServerError().into())
+                        }
+                        // Everything exploded.
+                        Err(e) => {
+                            error!("An error occurred: {}", e);
+                            Ok(HttpResponse::InternalServerError().into())
+                        }
+                    }
                 }
             }),
     )
@@ -346,12 +355,10 @@ fn main() -> std::io::Result<()> {
                 web::scope("/drink")
                     .service(
                         web::resource("")
-                            .route(web::get().to_async(get_entries))
-                            .route(web::post().to_async(new_entry)),
+                            .route(web::get().to(get_entries))
+                            .route(web::post().to(new_entry)),
                     )
-                    .service(
-                        web::resource("/{date}").route(web::get().to_async(get_entries_by_date)),
-                    ),
+                    .service(web::resource("/{date}").route(web::get().to(get_entries_by_date))),
             )
 
         /*.service(
