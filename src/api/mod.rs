@@ -112,6 +112,15 @@ impl ApiResponse<()> {
             messages: Some(vec![message.into()]),
         }
     }
+
+    #[allow(dead_code)]
+    pub fn fail_message<S: Into<String>>(message: S) -> ApiResponse<()> {
+        ApiResponse {
+            status: ResponseStatus::Fail,
+            data: None,
+            messages: Some(vec![message.into()]),
+        }
+    }
 }
 
 impl<T: Serialize> From<ApiResponse<T>> for actix_web::web::HttpResponse<actix_web::dev::Body> {

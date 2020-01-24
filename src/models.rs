@@ -49,6 +49,11 @@ impl ApproxF32 {
                 + (APPROX_MODIFIER
                     + ((!self.is_approximate as i32) as f32 * -1.0 * APPROX_MODIFIER)))
     }
+
+    /// Increment this value by one.
+    pub fn increment(&mut self) {
+        self.num = self.num + 1.0;
+    }
 }
 
 impl Hash for ApproxF32 {

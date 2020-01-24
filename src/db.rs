@@ -55,7 +55,7 @@ pub fn execute<T: Query + Send + 'static>(
     )
 }
 
-#[derive(Queryable, Serialize)]
+#[derive(Queryable, Serialize, Clone)]
 pub struct Entry {
     pub id: i32,
     pub drank_on: NaiveDate,
@@ -111,6 +111,12 @@ impl Entry {
     /// Check if this entry has any volume information.
     pub fn has_volume(&self) -> bool {
         self.volume.is_some()
+    }
+
+    /// Increment the min/max quantity values by 1.0.
+    pub fn increment(&mut self) {
+        self.min_quantity.increment();
+        self.max_quantity.increment();
     }
 }
 
@@ -320,5 +326,27 @@ impl Query for CreateEntry {
         Ok(diesel::insert_into(entry::table)
             .values(&new_entry)
             .get_result(&conn)?)
+    }
+}
+
+pub struct UpdateEntry {
+    pub entry: Entry,
+}
+
+impl Query for UpdateEntry {
+    type Output = ();
+
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
+        use schema::entry;
+        use schema::entry::dsl::*;
+
+        Ok(diesel::update(entry.find(self.entry.id))
+            .set((
+                time_period.eq(&self.entry.time),
+                min_quantity.eq(&self.entry.min_quantity),
+                max_quantity.eq(&self.entry.max_quantity),
+            ))
+            .execute(&conn)
+            .map(|_qs| ())?)
     }
 }

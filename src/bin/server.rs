@@ -27,7 +27,9 @@ use regex::Regex;
 
 use drink_list::api::{ApiResponse, ResponseStatus};
 use drink_list::db;
-use drink_list::db::{Connection, CreateDrink, CreateEntry, GetDrink, GetDrinks, GetEntry, Pool};
+use drink_list::db::{
+    Connection, CreateDrink, CreateEntry, GetDrink, GetDrinks, GetEntry, Pool, UpdateEntry,
+};
 use drink_list::import::{Abv, QuantityRange, VolumeContext};
 use drink_list::models::TimePeriod;
 use drink_list::reports::{DrinkAggregate, DrinkAggregator};
@@ -324,6 +326,52 @@ fn new_entry(
     )
 }
 
+async fn increment_entry(path: web::Path<i32>, pool: web::Data<Pool>) -> ActixResult<HttpResponse> {
+    use db::Entry;
+    // This closure will lookup the full details of the given entry.
+    let get_entry = |pool: &Pool, person_id: i32, entry_id: i32| {
+        db::execute(
+            &pool,
+            GetEntry {
+                person_id,
+                entry_id,
+            },
+        )
+    };
+
+    let update_entry = |pool: &Pool, entry: Entry| db::execute(&pool, UpdateEntry { entry });
+
+    let mut entry = match get_entry(&pool, 1, path.into_inner()).await {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            let response = ApiResponse::error_message("Not found");
+            return Ok(HttpResponse::NotFound().json(response));
+        }
+        Err(e) => {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::fail_message("Internal server error")));
+        }
+    };
+
+    // Increment the min/max quantities by 1.
+    entry.increment();
+
+    // Resave the Entry.
+    update_entry(&pool, entry.clone())
+        .and_then(|_| {
+            async move {
+                let output = AggregatedEntry {
+                    aggregate: entry.aggregate(),
+                    entry: entry,
+                };
+
+                Ok(ApiResponse::success(output).into())
+            }
+        })
+        .map_err(|e| actix_web::Error::from(e))
+        .await
+}
+
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
@@ -357,7 +405,8 @@ async fn main() -> std::io::Result<()> {
             .service(
                 web::scope("/drinks")
                     .route("", web::get().to(get_entries))
-                    .route("", web::post().to(new_entry)),
+                    .route("", web::post().to(new_entry))
+                    .route("/{id}/increment", web::put().to(increment_entry)),
             )
             .service(web::scope("/days").route("/{date}", web::get().to(get_entries_by_date)))
 
