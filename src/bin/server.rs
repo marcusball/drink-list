@@ -1,6 +1,8 @@
 #![feature(async_closure)]
 
 #[macro_use]
+extern crate actix_web;
+#[macro_use]
 extern crate serde;
 #[macro_use]
 extern crate log;
@@ -322,7 +324,8 @@ fn new_entry(
     )
 }
 
-fn main() -> std::io::Result<()> {
+#[actix_rt::main]
+async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     env_logger::init();
 
@@ -342,7 +345,7 @@ fn main() -> std::io::Result<()> {
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     let pool = Pool::new(manager).expect("Failed to create database connection pool!");
 
-    let sys = actix_rt::System::new("http-server");
+    info!("Listening on {}", listen_addr);
 
     HttpServer::new(move || {
         App::new()
@@ -353,12 +356,9 @@ fn main() -> std::io::Result<()> {
             .route("/wakeup", web::get().to(wakeup))
             .service(
                 web::scope("/drink")
-                    .service(
-                        web::resource("")
-                            .route(web::get().to(get_entries))
-                            .route(web::post().to(new_entry)),
-                    )
-                    .service(web::resource("/{date}").route(web::get().to(get_entries_by_date))),
+                    .route("", web::get().to(get_entries))
+                    .route("", web::post().to(new_entry))
+                    .route("/{date}", web::get().to(get_entries_by_date)),
             )
 
         /*.service(
@@ -382,13 +382,7 @@ fn main() -> std::io::Result<()> {
                 .service(web::resource("/brewery").route(web::get().to_async(search_brewery))),
         )*/
     })
-    .bind(&listen_addr)
-    .unwrap()
-    .start();
-
-    info!("Listening on {}", listen_addr);
-
-    let _ = sys.run();
-
-    Ok(())
+    .bind(&listen_addr)?
+    .run()
+    .await
 }

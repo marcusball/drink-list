@@ -15,26 +15,19 @@ pub enum Error {
 
     PoolError(r2d2::PoolError),
 
+    R2D2Error(r2d2::Error),
+
     FutureCanceled(FutureCanceled),
 
     EntryInputError(String),
 }
 
 impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        match self {
-            Self::SessionNotFound => "Session not found!",
-            Self::DieselError(e) => e.description(),
-            Self::PoolError(e) => e.description(),
-            Self::FutureCanceled(e) => e.description(),
-            Self::EntryInputError(message) => "Invalid Entry input!",
-        }
-    }
-
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::DieselError(e) => Some(e),
             Self::PoolError(e) => Some(e),
+            Self::R2D2Error(e) => Some(e),
             Self::FutureCanceled(e) => Some(e),
             Self::SessionNotFound => None,
             Self::EntryInputError(_) => None,
@@ -53,6 +46,12 @@ impl From<DieselError> for Error {
 impl From<r2d2::PoolError> for Error {
     fn from(e: r2d2::PoolError) -> Error {
         Error::PoolError(e)
+    }
+}
+
+impl From<r2d2::Error> for Error {
+    fn from(e: r2d2::Error) -> Error {
+        Error::R2D2Error(e)
     }
 }
 
