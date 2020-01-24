@@ -355,11 +355,11 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(index))
             .route("/wakeup", web::get().to(wakeup))
             .service(
-                web::scope("/drink")
+                web::scope("/drinks")
                     .route("", web::get().to(get_entries))
-                    .route("", web::post().to(new_entry))
-                    .route("/{date}", web::get().to(get_entries_by_date)),
+                    .route("", web::post().to(new_entry)),
             )
+            .service(web::scope("/days").route("/{date}", web::get().to(get_entries_by_date)))
 
         /*.service(
             web::scope("/drink")
