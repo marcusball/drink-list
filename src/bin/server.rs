@@ -1,4 +1,4 @@
-#![feature(async_closure)]
+// #![feature(async_closure)]
 
 #[macro_use]
 extern crate actix_web;

@@ -57,8 +57,6 @@ impl DateContext {
                 r#"^(?P<day>(?:\d{1,2}\s\w{3})|(?:\w{3}\s\d{1,2}))?[,; ]*(?:(?P<context2>[^\r\n;,]*?)[;,]?)?(?:(?P<context1>[^\r\n;,]*?)[;,]?)?$"#
             )
             .unwrap();
-
-            static ref BRUNCH: String = String::from("brunch");
         }
         if entry.date.is_none() {
             return previous.clone();
@@ -90,7 +88,7 @@ impl DateContext {
 
         // I frequently just write "brunch"; if so we'll mark this as "afternoon".
         let is_brunch =
-            context1.contains(&BRUNCH as &String) || context2.contains(&BRUNCH as &String);
+            Self::is_brunch_context(&context1) || Self::is_brunch_context(&context2);
 
         let time: TimePeriod = match (
             is_time_string(context1.as_ref()),
@@ -161,6 +159,18 @@ impl DateContext {
         };
 
         NaiveDate::from_ymd(year, month, day)
+    }
+
+    /// Test if the given time `context` is an `Option` containing "brunch".
+    /// 
+    /// Hacky workaround until `Option.contains()` is stabilized.
+    fn is_brunch_context(context: &Option<String>) -> bool {
+        match context { 
+            Some (c) => {
+                c.as_str() == "brunch"
+            },
+            None => false
+        }
     }
 }
 
@@ -510,12 +520,12 @@ impl DrinkSet {
     }
 
     pub fn insert(&mut self, id: i32, drink: Drink) -> i32 {
-        self.drinks
+        assert!(self.drinks
             .insert(id, drink.clone())
-            .expect_none("Overwrote something!");
-        self.lookup
+            .is_none(), "Overwrote something!");
+        assert!(self.lookup
             .insert(drink, id)
-            .expect_none("Overwrote something!");
+            .is_none(), "Overwrote something!");
 
         id
     }
