@@ -329,6 +329,23 @@ impl Query for CreateEntry {
     }
 }
 
+pub struct DeleteEntry {
+    pub entry: Entry,
+}
+
+impl Query for DeleteEntry {
+    type Output = ();
+
+    fn execute(&self, conn: Connection) -> Result<Self::Output> {
+        use schema::entry::dsl::*;
+
+        Ok(diesel::delete(entry.find(self.entry.id))
+            .execute(&conn)
+            .map(|_qs| ())?)
+    }
+}
+
+
 pub struct UpdateEntry {
     pub entry: Entry,
 }

@@ -28,7 +28,7 @@ use regex::Regex;
 use drink_list::api::{ApiResponse, ResponseStatus};
 use drink_list::db;
 use drink_list::db::{
-    Connection, CreateDrink, CreateEntry, GetDrink, GetDrinks, GetEntry, Pool, UpdateEntry,
+    Connection, CreateDrink, CreateEntry, GetDrink, GetDrinks, GetEntry, Pool, UpdateEntry, DeleteEntry,
 };
 use drink_list::import::{Abv, QuantityRange, VolumeContext};
 use drink_list::models::TimePeriod;
@@ -326,6 +326,44 @@ fn new_entry(
     )
 }
 
+async fn delete_entry(path: web::Path<i32>, pool: web::Data<Pool>) -> ActixResult<HttpResponse> {
+    use db::Entry;
+    // This closure will lookup the full details of the given entry.
+    let get_entry = |pool: &Pool, person_id: i32, entry_id: i32| {
+        db::execute(
+            &pool,
+            GetEntry {
+                person_id,
+                entry_id,
+            },
+        )
+    };
+
+    let delete_entry = |pool: &Pool, entry: Entry| db::execute(&pool, DeleteEntry { entry });
+
+    let entry = match get_entry(&pool, 1, path.into_inner()).await {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            let response = ApiResponse::error_message("Not found");
+            return Ok(HttpResponse::NotFound().json(response));
+        }
+        Err(e) => {
+            return Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::fail_message("Internal server error")));
+        }
+    };
+
+    // Resave the Entry.
+    delete_entry(&pool, entry.clone())
+        .and_then(|_| {
+            async move {
+                Ok(ApiResponse::success_message("Entry deleted").into())
+            }
+        })
+        .map_err(|e| actix_web::Error::from(e))
+        .await
+}
+
 async fn increment_entry(path: web::Path<i32>, pool: web::Data<Pool>) -> ActixResult<HttpResponse> {
     use db::Entry;
     // This closure will lookup the full details of the given entry.
@@ -406,6 +444,7 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/drinks")
                     .route("", web::get().to(get_entries))
                     .route("", web::post().to(new_entry))
+                    .route("/{id}", web::delete().to(delete_entry))
                     .route("/{id}/increment", web::put().to(increment_entry)),
             )
             .service(web::scope("/days").route("/{date}", web::get().to(get_entries_by_date)))
