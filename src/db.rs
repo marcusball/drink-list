@@ -175,7 +175,7 @@ impl Query for GetDrinks {
             query = query.filter(entry::drank_on.ge(start).and(entry::drank_on.le(end)));
         }
         Ok(query
-            .order(entry::drank_on.asc())
+            .order(entry::drank_on.desc())
             .then_order_by(entry::time_period.asc())
             .load::<Entry>(&conn)?)
     }
